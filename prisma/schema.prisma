@@ -1,0 +1,412 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("NEON_DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  password      String?
+  image         String?
+  role          Role      @default(STUDENT)
+  credits       Int       @default(0)
+  studentNumber Int?      @unique // Auto-generated, starts from 200, increments by 5
+
+  phone         String?
+  addressLine1  String?
+  addressLine2  String?
+  city          String?
+  district      String?
+  postalCode    String?
+  country       String?   @default("Sri Lanka")
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  courses       Course[]  @relation("InstructorCourses")
+  enrollments   Enrollment[]
+  payments      Payment[]
+  reviews       Review[]
+  wishlist      Wishlist[] @relation("StudentWishlist")
+  notifications Notification[] @relation("StudentNotifications")
+  certificates  Certificate[] @relation("StudentCertificates")
+  sentMessages  Message[] @relation("SentMessages")
+  receivedMessages Message[] @relation("ReceivedMessages")
+  payouts       Payout[] @relation("InstructorPayouts")
+  sessionJoinLogs SessionJoinLog[] @relation("StudentSessionJoins")
+
+  @@index([email])
+  @@index([role])
+}
+
+model Course {
+  id            String    @id @default(cuid())
+  title         String
+  description   String    @db.Text
+  price         Float
+  thumbnail     String?
+  instructorId  String
+  instructor    User      @relation("InstructorCourses", fields: [instructorId], references: [id], onDelete: Cascade)
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  published     Boolean   @default(false)
+
+  // Relations
+  videos        Video[]
+  enrollments   Enrollment[]
+  reviews       Review[]
+  payments      Payment[]
+  wishlist      Wishlist[] @relation("CourseWishlist")
+  certificates  Certificate[] @relation("CourseCertificates")
+  liveSessions  LiveSession[] @relation("CourseLiveSessions")
+  resources     CourseResource[] @relation("CourseResources")
+
+  @@index([instructorId])
+  @@index([published])
+}
+
+model Video {
+  id            String    @id @default(cuid())
+  title         String
+  description   String?   @db.Text
+  courseId      String
+  course        Course    @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  
+  cloudflareStreamId String  // Cloudflare Stream video ID
+  duration      Int?      // Duration in seconds
+  order         Int       @default(0)
+  isFree        Boolean   @default(false) // Free preview videos visible to non-enrolled users
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  progress      VideoProgress[]
+
+  @@index([courseId])
+  @@unique([courseId, order])
+}
+
+model Enrollment {
+  id            String    @id @default(cuid())
+  studentId     String
+  student       User      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  courseId      String
+  course        Course    @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  
+  status        EnrollmentStatus @default(PENDING)
+  paymentMethod String?   @default("online") // online, manual, free
+  receiptImage  String?   // For manual enrollments via ATM
+  approvedBy    String?   // Instructor/admin who approved manual enrollment
+  approvedAt    DateTime?
+  
+  requiresDelivery Boolean @default(false)
+  
+  enrolledAt    DateTime  @default(now())
+  completedAt   DateTime?
+
+  // Relations
+  progress      VideoProgress[]
+  delivery      Delivery?
+  payment       Payment?  @relation("EnrollmentPayment")
+  liveSessions  LiveSession[]
+
+  @@unique([studentId, courseId])
+  @@index([studentId])
+  @@index([courseId])
+  @@index([status])
+}
+
+model VideoProgress {
+  id            String    @id @default(cuid())
+  enrollmentId  String
+  enrollment    Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  videoId       String
+  video         Video     @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  
+  watchedAt     DateTime  @default(now())
+  completed     Boolean   @default(false)
+  completedAt   DateTime?
+
+  @@unique([enrollmentId, videoId])
+  @@index([enrollmentId])
+  @@index([videoId])
+  @@index([enrollmentId, completed]) // Composite index for better stats queries
+  @@index([completed]) // Index for filtering completed videos
+}
+
+model Payment {
+  id            String    @id @default(cuid())
+  studentId     String
+  student       User      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  courseId      String
+  course        Course    @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  
+  amount        Float
+  currency      String    @default("LKR")
+  status        PaymentStatus @default(PENDING)
+  paymentMethod String?
+  
+  payHereOrderId String?   @unique
+  payHerePaymentId String?  @unique
+  
+  enrollmentId  String?   @unique
+  enrollment    Enrollment? @relation("EnrollmentPayment", fields: [enrollmentId], references: [id], onDelete: SetNull)
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([studentId])
+  @@index([courseId])
+  @@index([status])
+}
+
+model Review {
+  id            String    @id @default(cuid())
+  studentId     String
+  student       User      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  courseId      String
+  course        Course    @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  
+  rating        Int       // 1-5
+  comment       String?   @db.Text
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([studentId, courseId])
+  @@index([courseId])
+}
+
+model Wishlist {
+  id            String    @id @default(cuid())
+  studentId     String
+  student       User      @relation("StudentWishlist", fields: [studentId], references: [id], onDelete: Cascade)
+  courseId      String
+  course        Course    @relation("CourseWishlist", fields: [courseId], references: [id], onDelete: Cascade)
+  
+  addedAt       DateTime  @default(now())
+
+  @@unique([studentId, courseId])
+  @@index([studentId])
+  @@index([courseId])
+}
+
+model Notification {
+  id            String    @id @default(cuid())
+  studentId     String
+  student       User      @relation("StudentNotifications", fields: [studentId], references: [id], onDelete: Cascade)
+  
+  title         String
+  message       String    @db.Text
+  type          String    @default("info") // info, warning, success, question
+  read          Boolean   @default(false)
+  
+  createdAt     DateTime  @default(now())
+
+  @@index([studentId])
+  @@index([read])
+}
+
+model Message {
+  id            String    @id @default(cuid())
+  senderId      String
+  sender        User      @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  recipientId   String
+  recipient     User      @relation("ReceivedMessages", fields: [recipientId], references: [id], onDelete: Cascade)
+  
+  subject       String?
+  content       String    @db.Text
+  courseId      String?   // Optional: if message is about a specific course
+  read          Boolean   @default(false)
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([senderId])
+  @@index([recipientId])
+  @@index([read])
+}
+
+model Payout {
+  id            String    @id @default(cuid())
+  instructorId  String
+  instructor    User      @relation("InstructorPayouts", fields: [instructorId], references: [id], onDelete: Cascade)
+  
+  amount        Float
+  currency      String    @default("LKR")
+  status        PayoutStatus @default(PENDING)
+  paymentMethod String?   // bank_transfer, paypal, etc
+  
+  accountNumber String?
+  accountHolder String?
+  
+  requestedAt   DateTime  @default(now())
+  processedAt   DateTime?
+  completedAt   DateTime?
+
+  @@index([instructorId])
+  @@index([status])
+}
+
+model Certificate {
+  id            String    @id @default(cuid())
+  studentId     String
+  student       User      @relation("StudentCertificates", fields: [studentId], references: [id], onDelete: Cascade)
+  courseId      String
+  course        Course    @relation("CourseCertificates", fields: [courseId], references: [id], onDelete: Cascade)
+  
+  certificateUrl String?
+  completedAt   DateTime  @default(now())
+  issuedAt      DateTime  @default(now())
+
+  @@unique([studentId, courseId])
+  @@index([studentId])
+  @@index([courseId])
+}
+
+model LiveSession {
+  id            String    @id @default(cuid())
+  courseId      String
+  course        Course    @relation("CourseLiveSessions", fields: [courseId], references: [id], onDelete: Cascade)
+  
+  title         String
+  description   String?   @db.Text
+  meetingUrl    String    // The actual Zoom/meeting link (hidden from students)
+  meetingId     String?   // Optional meeting ID for display
+  passcode      String?   // Optional passcode (hidden from students)
+  
+  scheduledAt   DateTime  // When the session is scheduled
+  duration      Int       @default(60) // Duration in minutes
+  status        LiveSessionStatus @default(SCHEDULED)
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  joinLogs      SessionJoinLog[]
+  enrollments   Enrollment[]
+
+  @@index([courseId])
+  @@index([scheduledAt])
+  @@index([status])
+}
+
+model SessionJoinLog {
+  id            String    @id @default(cuid())
+  sessionId     String
+  session       LiveSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  studentId     String
+  student       User      @relation("StudentSessionJoins", fields: [studentId], references: [id], onDelete: Cascade)
+  
+  joinedAt      DateTime  @default(now())
+  ipAddress     String?
+
+  @@index([sessionId])
+  @@index([studentId])
+}
+
+model CourseResource {
+  id            String    @id @default(cuid())
+  courseId      String
+  course        Course    @relation("CourseResources", fields: [courseId], references: [id], onDelete: Cascade)
+  
+  title         String
+  description   String?
+  fileName      String    // Original filename
+  fileKey       String    // R2 object key
+  fileSize      Int       // Size in bytes
+  fileType      String    // MIME type (application/pdf, etc.)
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([courseId])
+}
+
+model Delivery {
+  id            String    @id @default(cuid())
+  enrollmentId  String    @unique
+  enrollment    Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  
+  // Recipient details
+  fullName      String
+  phone         String
+  email         String?
+  
+  // Address details
+  addressLine1  String
+  addressLine2  String?
+  city          String
+  district      String
+  postalCode    String?
+  country       String    @default("Sri Lanka")
+  
+  // Delivery status
+  status        DeliveryStatus @default(PENDING)
+  trackingNumber String?
+  courier       String?   // Courier service name
+  notes         String?   @db.Text  // Internal notes for instructor
+  
+  // Timestamps
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  shippedAt     DateTime?
+  deliveredAt   DateTime?
+
+  @@index([status])
+}
+
+enum Role {
+  STUDENT
+  INSTRUCTOR
+  ADMIN
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum PayoutStatus {
+  PENDING
+  APPROVED
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum EnrollmentStatus {
+  PENDING    // Waiting for approval (manual) or payment (online)
+  APPROVED   // Approved and active
+  REJECTED   // Rejected by instructor
+  CANCELLED  // Cancelled by student
+}
+
+enum LiveSessionStatus {
+  SCHEDULED
+  LIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum DeliveryStatus {
+  PENDING      // Waiting to be shipped
+  PROCESSING   // Being prepared for shipping
+  SHIPPED      // Shipped, in transit
+  DELIVERED    // Successfully delivered
+  CANCELLED    // Cancelled
+}
