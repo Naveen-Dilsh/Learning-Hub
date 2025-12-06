@@ -47,60 +47,60 @@ export default function StudentDashboard() {
     <div className="p-4 sm:p-6 lg:p-8">
       {/* Header */}
       <div className="mb-6 sm:mb-8">
-        <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 dark:text-gray-100">
+        <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-foreground">
           Welcome back, {session?.user?.name}!
         </h1>
-        <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400 mt-2">
+        <p className="text-sm sm:text-base text-muted-foreground mt-2">
           Continue learning and expand your skills
         </p>
       </div>
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-8 sm:mb-12">
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 sm:p-6 hover:shadow-md transition">
+        <div className="bg-card rounded-xl shadow-sm border border-border p-4 sm:p-6 hover:shadow-md transition">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-gray-600 dark:text-gray-400 text-xs sm:text-sm font-medium">Enrolled Courses</p>
-              <p className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-100 mt-2">{stats.totalCourses}</p>
+              <p className="text-muted-foreground text-xs sm:text-sm font-medium">Enrolled Courses</p>
+              <p className="text-2xl sm:text-3xl font-bold text-foreground mt-2">{stats.totalCourses}</p>
             </div>
-            <div className="w-12 h-12 sm:w-14 sm:h-14 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center">
-              <BookOpen className="w-6 h-6 sm:w-7 sm:h-7 text-blue-600 dark:text-blue-400" />
+            <div className="w-12 h-12 sm:w-14 sm:h-14 bg-primary/10 rounded-lg flex items-center justify-center">
+              <BookOpen className="w-6 h-6 sm:w-7 sm:h-7 text-primary" />
             </div>
           </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 sm:p-6 hover:shadow-md transition">
+        <div className="bg-card rounded-xl shadow-sm border border-border p-4 sm:p-6 hover:shadow-md transition">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-gray-600 dark:text-gray-400 text-xs sm:text-sm font-medium">Learning Hours</p>
-              <p className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-100 mt-2">{stats.hoursWatched}</p>
+              <p className="text-muted-foreground text-xs sm:text-sm font-medium">Learning Hours</p>
+              <p className="text-2xl sm:text-3xl font-bold text-foreground mt-2">{stats.hoursWatched}</p>
             </div>
-            <div className="w-12 h-12 sm:w-14 sm:h-14 bg-purple-100 dark:bg-purple-900/30 rounded-lg flex items-center justify-center">
-              <Zap className="w-6 h-6 sm:w-7 sm:h-7 text-purple-600 dark:text-purple-400" />
+            <div className="w-12 h-12 sm:w-14 sm:h-14 bg-secondary/10 rounded-lg flex items-center justify-center">
+              <Zap className="w-6 h-6 sm:w-7 sm:h-7 text-secondary" />
             </div>
           </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 sm:p-6 hover:shadow-md transition">
+        <div className="bg-card rounded-xl shadow-sm border border-border p-4 sm:p-6 hover:shadow-md transition">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-gray-600 dark:text-gray-400 text-xs sm:text-sm font-medium">Completed Courses</p>
-              <p className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-100 mt-2">{stats.completedCourses}</p>
+              <p className="text-muted-foreground text-xs sm:text-sm font-medium">Completed Courses</p>
+              <p className="text-2xl sm:text-3xl font-bold text-foreground mt-2">{stats.completedCourses}</p>
             </div>
-            <div className="w-12 h-12 sm:w-14 sm:h-14 bg-green-100 dark:bg-green-900/30 rounded-lg flex items-center justify-center">
-              <Award className="w-6 h-6 sm:w-7 sm:h-7 text-green-600 dark:text-green-400" />
+            <div className="w-12 h-12 sm:w-14 sm:h-14 bg-chart-4/10 rounded-lg flex items-center justify-center">
+              <Award className="w-6 h-6 sm:w-7 sm:h-7 text-chart-4" />
             </div>
           </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 sm:p-6 hover:shadow-md transition">
+        <div className="bg-card rounded-xl shadow-sm border border-border p-4 sm:p-6 hover:shadow-md transition">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-gray-600 dark:text-gray-400 text-xs sm:text-sm font-medium">Certificates Earned</p>
-              <p className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-100 mt-2">{stats.certificates}</p>
+              <p className="text-muted-foreground text-xs sm:text-sm font-medium">Certificates Earned</p>
+              <p className="text-2xl sm:text-3xl font-bold text-foreground mt-2">{stats.certificates}</p>
             </div>
-            <div className="w-12 h-12 sm:w-14 sm:h-14 bg-amber-100 dark:bg-amber-900/30 rounded-lg flex items-center justify-center">
-              <Award className="w-6 h-6 sm:w-7 sm:h-7 text-amber-600 dark:text-amber-400" />
+            <div className="w-12 h-12 sm:w-14 sm:h-14 bg-chart-5/10 rounded-lg flex items-center justify-center">
+              <Award className="w-6 h-6 sm:w-7 sm:h-7 text-chart-5" />
             </div>
           </div>
         </div>
@@ -109,23 +109,23 @@ export default function StudentDashboard() {
       {/* Recent Courses */}
       <div className="mb-6 sm:mb-8">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 sm:mb-6 gap-2">
-          <h2 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">Recent Courses</h2>
+          <h2 className="text-xl sm:text-2xl font-bold text-foreground">Recent Courses</h2>
           <Link 
             href="/student/courses" 
-            className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-medium text-sm sm:text-base"
+            className="text-primary hover:text-primary/80 font-medium text-sm sm:text-base transition"
           >
             View All
           </Link>
         </div>
 
         {enrolledCourses.length === 0 ? (
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-8 sm:p-12 text-center">
-            <BookOpen className="w-12 h-12 sm:w-16 sm:h-16 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
-            <p className="text-gray-900 dark:text-gray-100 font-medium mb-2 text-sm sm:text-base">No courses yet</p>
-            <p className="text-gray-600 dark:text-gray-400 mb-4 text-xs sm:text-sm">Start learning by enrolling in courses</p>
+          <div className="bg-card rounded-xl shadow-sm border border-border p-8 sm:p-12 text-center">
+            <BookOpen className="w-12 h-12 sm:w-16 sm:h-16 text-muted-foreground mx-auto mb-4" />
+            <p className="text-foreground font-medium mb-2 text-sm sm:text-base">No courses yet</p>
+            <p className="text-muted-foreground mb-4 text-xs sm:text-sm">Start learning by enrolling in courses</p>
             <Link
               href="/courses"
-              className="inline-block px-4 sm:px-6 py-2 bg-blue-600 dark:bg-blue-700 text-white rounded-lg hover:bg-blue-700 dark:hover:bg-blue-600 transition text-sm sm:text-base"
+              className="btn-primary inline-block px-4 sm:px-6 py-2 rounded-lg text-sm sm:text-base active:scale-[0.98]"
             >
               Browse Courses
             </Link>
@@ -135,7 +135,7 @@ export default function StudentDashboard() {
             {enrolledCourses.map((enrollment) => (
               <div
                 key={enrollment.id}
-                className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden hover:shadow-md transition"
+                className="bg-card rounded-xl shadow-sm border border-border overflow-hidden hover:shadow-md transition"
               >
                 {enrollment.course.thumbnail && (
                   <img
@@ -145,21 +145,21 @@ export default function StudentDashboard() {
                   />
                 )}
                 <div className="p-3 sm:p-4">
-                  <h3 className="font-bold text-base sm:text-lg text-gray-900 dark:text-gray-100 mb-2 line-clamp-1">
+                  <h3 className="font-bold text-base sm:text-lg text-foreground mb-2 line-clamp-1">
                     {enrollment.course.title}
                   </h3>
-                  <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-4 line-clamp-2">
+                  <p className="text-xs sm:text-sm text-muted-foreground mb-4 line-clamp-2">
                     {enrollment.course.description}
                   </p>
 
                   <div className="mb-4">
                     <div className="flex justify-between items-center mb-2">
-                      <span className="text-xs text-gray-600 dark:text-gray-400 font-medium">Progress</span>
-                      <span className="text-xs font-bold text-blue-600 dark:text-blue-400">{enrollment.progress}%</span>
+                      <span className="text-xs text-muted-foreground font-medium">Progress</span>
+                      <span className="text-xs font-bold text-primary">{enrollment.progress}%</span>
                     </div>
-                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                    <div className="w-full bg-muted rounded-full h-2">
                       <div
-                        className="bg-blue-600 dark:bg-blue-500 h-2 rounded-full transition-all"
+                        className="bg-primary h-2 rounded-full transition-all"
                         style={{ width: `${enrollment.progress}%` }}
                       ></div>
                     </div>
@@ -167,7 +167,7 @@ export default function StudentDashboard() {
 
                   <Link
                     href={`/courses/${enrollment.course.id}/watch`}
-                    className="block w-full px-3 py-2 bg-blue-600 dark:bg-blue-700 text-white rounded-lg text-center text-xs sm:text-sm hover:bg-blue-700 dark:hover:bg-blue-600 transition font-medium"
+                    className="btn-primary block w-full px-3 py-2 rounded-lg text-center text-xs sm:text-sm font-medium active:scale-[0.98]"
                   >
                     Continue Learning
                   </Link>

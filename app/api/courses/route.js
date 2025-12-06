@@ -2,6 +2,43 @@ import { prisma } from "@/lib/db"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { NextResponse } from "next/server"
+import { unstable_cache, revalidateTag } from "next/cache"
+
+// Cached function to fetch published courses
+const getCachedCourses = unstable_cache(
+  async (where) => {
+    return await prisma.course.findMany({
+      where,
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        price: true,
+        thumbnail: true,
+        published: true,
+        createdAt: true,
+        instructor: { 
+          select: { 
+            id: true, 
+            name: true 
+          } 
+        },
+        _count: { 
+          select: { 
+            enrollments: true, 
+            videos: true 
+          } 
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    })
+  },
+  ['courses-list'],
+  {
+    revalidate: 120, // Cache for 2 minutes
+    tags: ['courses'],
+  }
+)
 
 export async function GET(request) {
   try {
@@ -13,14 +50,39 @@ export async function GET(request) {
     if (instructorId) where.instructorId = instructorId
     if (published !== null) where.published = published === "true"
 
-    const courses = await prisma.course.findMany({
-      where,
-      include: {
-        instructor: { select: { id: true, name: true, email: true } },
-        _count: { select: { enrollments: true, videos: true } },
-      },
-      orderBy: { createdAt: "desc" },
-    })
+    // Use cache for published courses (public view)
+    let courses
+    if (published === "true" && !instructorId) {
+      courses = await getCachedCourses(where)
+    } else {
+      // No cache for instructor-specific or admin views
+      courses = await prisma.course.findMany({
+        where,
+        select: {
+          id: true,
+          title: true,
+          description: true,
+          price: true,
+          thumbnail: true,
+          published: true,
+          createdAt: true,
+          instructor: { 
+            select: { 
+              id: true, 
+              name: true,
+              email: true 
+            } 
+          },
+          _count: { 
+            select: { 
+              enrollments: true, 
+              videos: true 
+            } 
+          },
+        },
+        orderBy: { createdAt: "desc" },
+      })
+    }
 
     return NextResponse.json(courses)
   } catch (error) {
@@ -52,6 +114,9 @@ export async function POST(request) {
         instructorId: session.user.id,
       },
     })
+
+    // Invalidate courses cache
+    revalidateTag('courses')
 
     return NextResponse.json(course, { status: 201 })
   } catch (error) {

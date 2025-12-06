@@ -2,17 +2,59 @@ import { prisma } from "@/lib/db"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { NextResponse } from "next/server"
+import { unstable_cache, revalidateTag } from "next/cache"
+
+// Cached function for public course details
+const getCachedCourse = unstable_cache(
+  async (courseId) => {
+    return await prisma.course.findUnique({
+      where: { id: courseId },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        price: true,
+        thumbnail: true,
+        published: true,
+        createdAt: true,
+        instructor: { 
+          select: { 
+            id: true, 
+            name: true 
+          } 
+        },
+        videos: {
+          select: {
+            id: true,
+            title: true,
+            description: true,
+            duration: true,
+            isFree: true,
+            order: true,
+            cloudflareStreamId: true,
+          },
+          orderBy: { order: "asc" }
+        },
+        _count: { 
+          select: { 
+            enrollments: true, 
+            reviews: true 
+          } 
+        },
+      },
+    })
+  },
+  ['course-detail'],
+  {
+    revalidate: 60, // Cache for 60 seconds
+    tags: ['courses'],
+  }
+)
 
 export async function GET(request, { params }) {
   try {
-    const course = await prisma.course.findUnique({
-      where: { id: params.id },
-      include: {
-        instructor: { select: { id: true, name: true, email: true } },
-        videos: { orderBy: { order: "asc" } },
-        _count: { select: { enrollments: true, reviews: true } },
-      },
-    })
+    // Use cache for course details
+    const course = await getCachedCourse(params.id)
 
     if (!course) {
       return NextResponse.json({ message: "Course not found" }, { status: 404 })
@@ -21,7 +63,21 @@ export async function GET(request, { params }) {
     return NextResponse.json(course)
   } catch (error) {
     console.error("Error fetching course:", error)
-    return NextResponse.json({ message: "Internal server error" }, { status: 500 })
+    
+    // Return more specific error messages
+    let errorMessage = "Failed to fetch course"
+    let statusCode = 500
+    
+    if (error.message) {
+      errorMessage = error.message
+    } else if (error.name === "PrismaClientKnownRequestError") {
+      errorMessage = "Database error occurred. Please try again."
+    }
+    
+    return NextResponse.json({ 
+      message: errorMessage,
+      error: error.message || "An unexpected error occurred"
+    }, { status: statusCode })
   }
 }
 
@@ -58,6 +114,9 @@ export async function PUT(request, { params }) {
       },
     })
 
+    // Invalidate cache
+    revalidateTag('courses')
+
     return NextResponse.json(updatedCourse)
   } catch (error) {
     console.error("Error updating course:", error)
@@ -88,6 +147,9 @@ export async function DELETE(request, { params }) {
     await prisma.course.delete({
       where: { id: params.id },
     })
+
+    // Invalidate cache
+    revalidateTag('courses')
 
     return NextResponse.json({ message: "Course deleted successfully" })
   } catch (error) {

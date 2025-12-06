@@ -142,6 +142,65 @@ export async function POST(request) {
     })
   } catch (error) {
     console.error("Error creating payment:", error)
-    return NextResponse.json({ message: "Internal server error" }, { status: 500 })
+    
+    // Handle Prisma errors with specific constraint violations
+    if (error.code === "P2002") {
+      // Unique constraint violation
+      const target = error.meta?.target
+      const field = Array.isArray(target) ? target[0] : target || "field"
+      const model = error.meta?.model || "Model"
+      
+      // Show exact Prisma error message format
+      const prismaMessage = `Invalid Prisma.${model.toLowerCase()}.create() invocation:\n\nUnique constraint failed on the fields: (${field})`
+      
+      return NextResponse.json({ 
+        message: prismaMessage,
+        error: error.message,
+        code: "UNIQUE_CONSTRAINT_VIOLATION",
+        field: field,
+        fields: target,
+        model: model,
+        prismaCode: error.code
+      }, { status: 400 })
+    }
+    
+    if (error.code === "P2003") {
+      // Foreign key constraint violation
+      const field = error.meta?.field_name || "field"
+      return NextResponse.json({ 
+        message: `Invalid Prisma.${error.meta?.model || 'Model'}.create() invocation: Foreign key constraint failed on the field "${field}"`,
+        error: error.message,
+        code: "FOREIGN_KEY_CONSTRAINT_VIOLATION",
+        field: field
+      }, { status: 400 })
+    }
+    
+    if (error.code === "P2025") {
+      // Record not found
+      return NextResponse.json({ 
+        message: error.message || "Record not found",
+        error: error.message,
+        code: "RECORD_NOT_FOUND"
+      }, { status: 404 })
+    }
+    
+    // Return more specific error messages
+    let errorMessage = "Internal server error"
+    let statusCode = 500
+    
+    if (error.message) {
+      errorMessage = error.message
+    } else if (error.name === "PrismaClientKnownRequestError") {
+      errorMessage = `Database error: ${error.message || "An unexpected database error occurred"}`
+    } else if (error.name === "ValidationError") {
+      errorMessage = error.message || "Validation error"
+      statusCode = 400
+    }
+    
+    return NextResponse.json({ 
+      message: errorMessage,
+      error: error.message || "An unexpected error occurred",
+      code: error.code || "UNKNOWN_ERROR"
+    }, { status: statusCode })
   }
 }

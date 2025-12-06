@@ -1,64 +1,32 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback, useMemo } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { useSession } from "next-auth/react"
 import { useCartStore } from "@/lib/stores"
+import { useToast } from "@/hooks/use-toast"
 import Link from "next/link"
 import LoadingBubbles from "@/components/loadingBubbles"
-import { ShoppingCart, CreditCard, ArrowLeft, Lock, MapPin, Package, AlertCircle, CheckCircle, Clock, Users } from "lucide-react"
-
-const NotificationPopup = ({ notification, onClose }) => {
-  useEffect(() => {
-    if (notification.show) {
-      const timer = setTimeout(() => {
-        onClose()
-      }, 5000)
-      return () => clearTimeout(timer)
-    }
-  }, [notification.show, onClose])
-
-  if (!notification.show) return null
-
-  return (
-    <div className="fixed top-4 right-4 z-50 animate-in slide-in-from-right duration-300">
-      <div className={`flex items-center gap-3 p-4 rounded-xl shadow-xl ${
-        notification.type === 'error' 
-          ? 'bg-red-50 border-2 border-red-300' 
-          : 'bg-emerald-50 border-2 border-emerald-300'
-      }`}>
-        <AlertCircle className={`w-5 h-5 ${
-          notification.type === 'error' ? 'text-red-600' : 'text-emerald-600'
-        }`} />
-        <p className={`text-sm font-semibold ${
-          notification.type === 'error' ? 'text-red-900' : 'text-emerald-900'
-        }`}>
-          {notification.message}
-        </p>
-        <button
-          onClick={onClose}
-          className="ml-auto text-slate-400 hover:text-slate-700 text-xl"
-        >
-          ×
-        </button>
-      </div>
-    </div>
-  )
-}
+import { ShoppingCart, CreditCard, ArrowLeft, Lock, MapPin, Package, CheckCircle, Clock, Users } from "lucide-react"
 
 export default function PurchaseCourse() {
   const params = useParams()
   const router = useRouter()
   const { data: session, status } = useSession()
   const { addToCart } = useCartStore()
+  const { toast } = useToast()
   const [course, setCourse] = useState(null)
   const [loading, setLoading] = useState(true)
   const [processing, setProcessing] = useState(false)
-  const [notification, setNotification] = useState({ show: false, type: '', message: '' })
-  
   const [requiresDelivery, setRequiresDelivery] = useState(false)
   const [userProfile, setUserProfile] = useState(null)
   const [hasAddress, setHasAddress] = useState(false)
+
+  // Memoized computed values
+  const isPaymentDisabled = useMemo(() => 
+    processing || (requiresDelivery && !hasAddress), 
+    [processing, requiresDelivery, hasAddress]
+  )
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -66,29 +34,47 @@ export default function PurchaseCourse() {
     }
   }, [status, router])
 
-  useEffect(() => {
-    if (params.id) {
-      fetchCourse()
-    }
-    if (session?.user) {
-      fetchUserProfile()
-    }
-  }, [params.id, session])
-
-  const fetchCourse = async () => {
+  const fetchCourse = useCallback(async () => {
     try {
-      const res = await fetch(`/api/courses/${params.id}`)
-      if (!res.ok) throw new Error("Failed to fetch course")
+      const res = await fetch(`/api/courses/${params.id}`, {
+        next: { revalidate: 60 }
+      })
+      if (!res.ok) {
+        let errorMessage = "Failed to fetch course"
+        let errorTitle = "Error Loading Course"
+        
+        try {
+          const errorData = await res.json()
+          errorMessage = errorData.message || errorData.error || `Error ${res.status}: ${res.statusText}`
+          
+          if (res.status === 404) {
+            errorTitle = "Course Not Found"
+            errorMessage = errorData.message || "The course you're looking for doesn't exist"
+          } else if (res.status === 401) {
+            errorTitle = "Authentication Required"
+            errorMessage = "Please sign in to view this course"
+          }
+        } catch (parseError) {
+          errorMessage = res.statusText || `Error ${res.status}: Unknown error`
+        }
+        
+        throw new Error(errorMessage)
+      }
       const data = await res.json()
       setCourse(data)
     } catch (err) {
-      setNotification({ show: true, type: 'error', message: 'Failed to load course' })
+      const errorMessage = err.message || "Failed to load course. Please try again."
+      toast({
+        variant: "destructive",
+        title: "Error Loading Course",
+        description: errorMessage,
+      })
     } finally {
       setLoading(false)
     }
-  }
+  }, [params.id, toast])
 
-  const fetchUserProfile = async () => {
+  const fetchUserProfile = useCallback(async () => {
     try {
       const res = await fetch("/api/user/profile")
       if (res.ok) {
@@ -99,20 +85,28 @@ export default function PurchaseCourse() {
     } catch (error) {
       console.error("Error fetching profile:", error)
     }
-  }
+  }, [])
 
-  const handlePurchase = async () => {
+  useEffect(() => {
+    if (params.id) {
+      fetchCourse()
+    }
+    if (session?.user) {
+      fetchUserProfile()
+    }
+  }, [params.id, session, fetchCourse, fetchUserProfile])
+
+  const handlePurchase = useCallback(async () => {
     if (requiresDelivery && !hasAddress) {
-      setNotification({ 
-        show: true, 
-        type: 'error', 
-        message: 'Please update your delivery address in Settings before ordering materials' 
+      toast({
+        variant: "destructive",
+        title: "Address Required",
+        description: "Please update your delivery address in Settings before ordering materials",
       })
       return
     }
 
     setProcessing(true)
-    setNotification({ show: false, type: '', message: '' })
 
     try {
       addToCart({
@@ -132,13 +126,51 @@ export default function PurchaseCourse() {
       })
 
       if (!res.ok) {
-        const data = await res.json()
-        if (data.code === "MISSING_ADDRESS") {
-          setNotification({ show: true, type: 'error', message: data.message })
-          setProcessing(false)
-          return
+        let errorMessage = 'Failed to create payment'
+        let errorTitle = "Payment Error"
+        
+        try {
+          const errorData = await res.json()
+          
+          // Handle Prisma constraint violations
+          if (errorData.code === "UNIQUE_CONSTRAINT_VIOLATION") {
+            errorTitle = "Duplicate Entry"
+            // Show the exact Prisma error message
+            errorMessage = errorData.message || `Unique constraint failed on the fields: (${errorData.field})`
+          } else if (errorData.code === "FOREIGN_KEY_CONSTRAINT_VIOLATION") {
+            errorTitle = "Invalid Reference"
+            errorMessage = errorData.message || `Foreign key constraint failed on field "${errorData.field}"`
+          } else if (errorData.code === "RECORD_NOT_FOUND") {
+            errorTitle = "Not Found"
+            errorMessage = errorData.message || "The requested record was not found"
+          } else if (errorData.code === "MISSING_ADDRESS") {
+            errorTitle = "Address Required"
+            errorMessage = errorData.message || "Please add a delivery address in Settings"
+          } else {
+            // Extract error message from various possible fields
+            errorMessage = errorData.message || errorData.error || errorData.details || `Error ${res.status}: ${res.statusText}`
+            
+            // Handle HTTP status codes
+            if (res.status === 401) {
+              errorTitle = "Authentication Error"
+              errorMessage = "Please sign in to continue"
+            } else if (res.status === 404) {
+              errorTitle = "Not Found"
+              errorMessage = errorData.message || "Course not found"
+            } else if (res.status === 400) {
+              errorTitle = "Invalid Request"
+            }
+          }
+        } catch (parseError) {
+          // If response is not JSON, use status text
+          errorMessage = res.statusText || `Error ${res.status}: Unknown error`
         }
-        setNotification({ show: true, type: 'error', message: data.message || 'Failed to create payment' })
+        
+        toast({
+          variant: "destructive",
+          title: errorTitle,
+          description: errorMessage,
+        })
         setProcessing(false)
         return
       }
@@ -160,16 +192,19 @@ export default function PurchaseCourse() {
       document.body.appendChild(form)
       form.submit()
     } catch (err) {
-      setNotification({ show: true, type: 'error', message: 'An error occurred. Please try again.' })
+      const errorMessage = err.message || "An error occurred. Please try again."
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: errorMessage,
+      })
       setProcessing(false)
     }
-  }
-
-  const isPaymentDisabled = processing || (requiresDelivery && !hasAddress)
+  }, [requiresDelivery, hasAddress, params.id, course, addToCart, toast])
 
   if (status === "loading" || loading) {
     return (
-      <div>
+      <div className="flex items-center justify-center min-h-screen bg-background">
         <LoadingBubbles/>
       </div>
     )
@@ -177,10 +212,10 @@ export default function PurchaseCourse() {
 
   if (!course) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50">
+      <div className="flex items-center justify-center min-h-screen bg-background">
         <div className="text-center">
-          <p className="text-slate-700 text-lg font-medium">Course not found</p>
-          <Link href="/student/browse-courses" className="text-indigo-600 hover:underline mt-2 inline-block font-semibold">
+          <p className="text-foreground text-lg font-medium mb-4">Course not found</p>
+          <Link href="/student/browse-course" className="btn-primary inline-block px-4 py-2 rounded-lg">
             Browse Courses
           </Link>
         </div>
@@ -189,99 +224,95 @@ export default function PurchaseCourse() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50">
-      <NotificationPopup 
-        notification={notification} 
-        onClose={() => setNotification({ show: false, type: '', message: '' })} 
-      />
-
+    <div className="min-h-screen bg-background">
       {/* Header */}
-      <div className="bg-white/80 backdrop-blur-sm border-b border-indigo-100 shadow-sm sticky top-0 z-10">
-        <div className="max-w-3xl mx-auto px-6 py-5">
+      <div className="bg-card/95 backdrop-blur-sm border-b border-border shadow-sm sticky top-0 z-10">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-5">
           <Link 
             href={`/student/browse-course/${course.id}`}
-            className="inline-flex items-center gap-2 text-slate-600 hover:text-indigo-600 mb-3 font-medium transition-colors"
+            className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground mb-2 sm:mb-3 font-medium transition-colors text-sm sm:text-base"
           >
             <ArrowLeft className="w-4 h-4" />
             Back to Course
           </Link>
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+          <h1 className="text-2xl sm:text-3xl font-bold text-foreground">
             Complete Your Purchase
           </h1>
-          <p className="text-slate-600 mt-1">Secure checkout with PayHere</p>
+          <p className="text-sm sm:text-base text-muted-foreground mt-1">Secure checkout with PayHere</p>
         </div>
       </div>
 
-      <div className="max-w-3xl mx-auto px-6 py-10">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-10">
         
         {/* Course Card */}
-        <div className="bg-white rounded-2xl shadow-xl border border-indigo-100 overflow-hidden mb-6 hover:shadow-2xl transition-shadow">
+        <div className="bg-card rounded-xl shadow-sm border border-border overflow-hidden mb-4 sm:mb-6 hover:shadow-md transition-shadow">
           {course.thumbnail && (
-            <div className="relative h-64 bg-gradient-to-br from-indigo-100 to-purple-100">
+            <div className="relative h-48 sm:h-64 bg-muted">
               <img
                 src={course.thumbnail}
                 alt={course.title}
                 className="w-full h-full object-cover"
+                loading="lazy"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
-              <div className="absolute bottom-6 left-6 right-6">
-                <h2 className="text-3xl font-bold text-white mb-2 drop-shadow-lg">{course.title}</h2>
+              <div className="absolute bottom-4 sm:bottom-6 left-4 sm:left-6 right-4 sm:right-6">
+                <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold text-white mb-2 drop-shadow-lg line-clamp-2">{course.title}</h2>
               </div>
             </div>
           )}
           
-          <div className="p-8">
-            <p className="text-slate-600 leading-relaxed mb-6">{course.description}</p>
+          <div className="p-4 sm:p-6 lg:p-8">
+            <p className="text-sm sm:text-base text-muted-foreground leading-relaxed mb-4 sm:mb-6">{course.description}</p>
             
-            <div className="flex flex-wrap gap-6 pb-6 border-b border-slate-200">
+            <div className="flex flex-wrap gap-4 sm:gap-6 pb-4 sm:pb-6 border-b border-border">
               <div className="flex items-center gap-2">
-                <div className="p-2 bg-indigo-100 rounded-lg">
-                  <Users className="w-5 h-5 text-indigo-600" />
+                <div className="p-2 bg-primary/10 rounded-lg">
+                  <Users className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
                 </div>
                 <div>
-                  <p className="text-xs text-slate-500 font-medium">Instructor</p>
-                  <p className="text-sm font-bold text-slate-900">{course.instructor.name}</p>
+                  <p className="text-xs text-muted-foreground font-medium">Instructor</p>
+                  <p className="text-sm font-bold text-foreground truncate">{course.instructor.name}</p>
                 </div>
               </div>
               
               <div className="flex items-center gap-2">
-                <div className="p-2 bg-purple-100 rounded-lg">
-                  <Clock className="w-5 h-5 text-purple-600" />
+                <div className="p-2 bg-secondary/10 rounded-lg">
+                  <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-secondary" />
                 </div>
                 <div>
-                  <p className="text-xs text-slate-500 font-medium">Videos</p>
-                  <p className="text-sm font-bold text-slate-900">{course._count.videos} lessons</p>
+                  <p className="text-xs text-muted-foreground font-medium">Videos</p>
+                  <p className="text-sm font-bold text-foreground">{course._count.videos} lessons</p>
                 </div>
               </div>
 
               <div className="flex items-center gap-2">
-                <div className="p-2 bg-pink-100 rounded-lg">
-                  <Users className="w-5 h-5 text-pink-600" />
+                <div className="p-2 bg-accent/10 rounded-lg">
+                  <Users className="w-4 h-4 sm:w-5 sm:h-5 text-accent" />
                 </div>
                 <div>
-                  <p className="text-xs text-slate-500 font-medium">Enrolled</p>
-                  <p className="text-sm font-bold text-slate-900">{course._count.enrollments} students</p>
+                  <p className="text-xs text-muted-foreground font-medium">Enrolled</p>
+                  <p className="text-sm font-bold text-foreground">{course._count.enrollments} students</p>
                 </div>
               </div>
             </div>
 
             {/* What You'll Get */}
-            <div className="mt-6 bg-gradient-to-br from-indigo-50 to-purple-50 rounded-xl p-6 border border-indigo-100">
-              <h3 className="font-bold text-slate-900 mb-4 flex items-center gap-2">
-                <CheckCircle className="w-5 h-5 text-indigo-600" />
+            <div className="mt-4 sm:mt-6 bg-muted/50 rounded-xl p-4 sm:p-6 border border-border">
+              <h3 className="font-bold text-foreground mb-3 sm:mb-4 flex items-center gap-2 text-sm sm:text-base">
+                <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
                 What You'll Get
               </h3>
               <ul className="space-y-2">
-                <li className="flex items-center gap-2 text-sm text-slate-700">
-                  <div className="w-1.5 h-1.5 bg-indigo-600 rounded-full"></div>
+                <li className="flex items-center gap-2 text-xs sm:text-sm text-foreground">
+                  <div className="w-1.5 h-1.5 bg-primary rounded-full flex-shrink-0"></div>
                   Full lifetime access to all course materials
                 </li>
-                <li className="flex items-center gap-2 text-sm text-slate-700">
-                  <div className="w-1.5 h-1.5 bg-purple-600 rounded-full"></div>
+                <li className="flex items-center gap-2 text-xs sm:text-sm text-foreground">
+                  <div className="w-1.5 h-1.5 bg-secondary rounded-full flex-shrink-0"></div>
                   {course._count.videos} comprehensive video lessons
                 </li>
-                <li className="flex items-center gap-2 text-sm text-slate-700">
-                  <div className="w-1.5 h-1.5 bg-pink-600 rounded-full"></div>
+                <li className="flex items-center gap-2 text-xs sm:text-sm text-foreground">
+                  <div className="w-1.5 h-1.5 bg-accent rounded-full flex-shrink-0"></div>
                   Certificate of completion
                 </li>
               </ul>
@@ -290,71 +321,71 @@ export default function PurchaseCourse() {
         </div>
 
         {/* Payment Card */}
-        <div className="bg-white rounded-2xl shadow-xl border border-indigo-100 overflow-hidden">
-          <div className="bg-gradient-to-r from-indigo-500 to-purple-500 p-6 text-white">
-            <h3 className="font-bold text-xl flex items-center gap-2">
-              <ShoppingCart className="w-6 h-6" />
+        <div className="bg-card rounded-xl shadow-sm border border-border overflow-hidden">
+          <div className="bg-primary p-4 sm:p-6 text-primary-foreground">
+            <h3 className="font-bold text-lg sm:text-xl flex items-center gap-2">
+              <ShoppingCart className="w-5 h-5 sm:w-6 sm:h-6" />
               Order Summary
             </h3>
           </div>
 
-          <div className="p-8 space-y-6">
-            <div className="flex justify-between items-center pb-6 border-b-2 border-slate-200">
-              <span className="text-slate-600 font-medium">Course Price</span>
-              <span className="text-3xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
-                Rs. {course.price}
+          <div className="p-4 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
+            <div className="flex justify-between items-center pb-4 sm:pb-6 border-b-2 border-border">
+              <span className="text-muted-foreground font-medium text-sm sm:text-base">Course Price</span>
+              <span className="text-2xl sm:text-3xl font-bold text-primary">
+                Rs. {course.price.toLocaleString()}
               </span>
             </div>
 
             {/* Delivery Option */}
-            <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl p-5 border-2 border-amber-200">
+            <div className="bg-chart-5/10 rounded-xl p-4 sm:p-5 border-2 border-chart-5/30">
               <label className="flex items-start gap-3 cursor-pointer group">
                 <input
                   type="checkbox"
                   checked={requiresDelivery}
                   onChange={(e) => setRequiresDelivery(e.target.checked)}
-                  className="mt-1 h-5 w-5 rounded border-amber-300 text-amber-600 focus:ring-amber-500 cursor-pointer"
+                  className="mt-1 h-4 w-4 sm:h-5 sm:w-5 rounded border-border text-chart-5 focus:ring-primary cursor-pointer"
                 />
                 <div className="flex-1">
-                  <div className="flex items-center gap-2 font-bold text-slate-900 group-hover:text-amber-700 transition-colors">
-                    <Package className="w-5 h-5 text-amber-600" />
+                  <div className="flex items-center gap-2 font-bold text-foreground group-hover:text-chart-5 transition-colors text-sm sm:text-base">
+                    <Package className="w-4 h-4 sm:w-5 sm:h-5 text-chart-5" />
                     I need course materials delivered to my address
                   </div>
-                  <p className="text-sm text-slate-600 mt-1">
+                  <p className="text-xs sm:text-sm text-muted-foreground mt-1">
                     Check this if you want physical books/materials sent to your home
                   </p>
                 </div>
               </label>
 
               {requiresDelivery && (
-                <div className="mt-4 pt-4 border-t border-amber-200">
+                <div className="mt-4 pt-4 border-t border-chart-5/30">
                   {hasAddress ? (
-                    <div className="bg-white rounded-lg p-4 border-2 border-emerald-200">
-                      <div className="flex items-center gap-2 font-bold text-emerald-700 mb-2">
+                    <div className="bg-card rounded-lg p-3 sm:p-4 border-2 border-chart-4/30">
+                      <div className="flex items-center gap-2 font-bold text-chart-4 mb-2 text-sm sm:text-base">
                         <MapPin className="w-4 h-4" />
                         Delivery Address
                       </div>
-                      <p className="text-sm text-slate-700 leading-relaxed pl-6">
+                      <p className="text-xs sm:text-sm text-foreground leading-relaxed pl-6">
                         {userProfile?.addressLine1}, {userProfile?.city}, {userProfile?.district}
                         <br />
                         Phone: {userProfile?.phone}
                       </p>
                       <Link 
                         href="/student/settings" 
-                        className="text-indigo-600 hover:text-indigo-700 font-semibold text-sm mt-2 inline-block pl-6"
+                        className="text-primary hover:text-primary/80 font-semibold text-xs sm:text-sm mt-2 inline-block pl-6 transition"
                       >
                         Change address →
                       </Link>
                     </div>
                   ) : (
-                    <div className="bg-red-50 border-2 border-red-300 rounded-lg p-5 text-center">
-                      <AlertCircle className="w-10 h-10 text-red-500 mx-auto mb-3" />
-                      <p className="text-red-800 font-semibold mb-3">
+                    <div className="bg-destructive/10 border-2 border-destructive/30 rounded-lg p-4 sm:p-5 text-center">
+                      <MapPin className="w-8 h-8 sm:w-10 sm:h-10 text-destructive mx-auto mb-3" />
+                      <p className="text-destructive font-semibold mb-3 text-sm sm:text-base">
                         No delivery address found
                       </p>
                       <Link
                         href="/student/settings"
-                        className="inline-flex items-center gap-2 px-5 py-2.5 bg-red-600 text-white rounded-lg font-bold hover:bg-red-700 transition shadow-md"
+                        className="btn-danger inline-flex items-center gap-2 px-4 sm:px-5 py-2 sm:py-2.5 rounded-lg font-semibold text-xs sm:text-sm active:scale-[0.98]"
                       >
                         <MapPin className="w-4 h-4" />
                         Add Address Now
@@ -370,21 +401,21 @@ export default function PurchaseCourse() {
               <button
                 onClick={handlePurchase}
                 disabled={isPaymentDisabled}
-                className={`w-full flex items-center justify-center gap-3 py-4 px-6 rounded-xl font-bold text-lg transition-all shadow-lg ${
+                className={`w-full flex items-center justify-center gap-2 sm:gap-3 py-3 sm:py-4 px-4 sm:px-6 rounded-xl font-semibold text-sm sm:text-base lg:text-lg transition-all shadow-lg active:scale-[0.98] ${
                   isPaymentDisabled
-                    ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
-                    : 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white hover:from-indigo-700 hover:to-purple-700 hover:shadow-xl hover:scale-[1.02]'
+                    ? 'bg-muted text-muted-foreground cursor-not-allowed'
+                    : 'btn-primary hover:shadow-xl'
                 }`}
               >
                 {processing ? (
                   <>
-                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    Processing...
+                    <div className="w-4 h-4 sm:w-5 sm:h-5 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin"></div>
+                    <span>Processing...</span>
                   </>
                 ) : (
                   <>
-                    <CreditCard className="w-5 h-5" />
-                    Pay with PayHere
+                    <CreditCard className="w-4 h-4 sm:w-5 sm:h-5" />
+                    <span>Pay with PayHere</span>
                   </>
                 )}
               </button>
@@ -392,18 +423,18 @@ export default function PurchaseCourse() {
               <Link href={`/student/browse-course/${course.id}/enroll-manual?requiresDelivery=${requiresDelivery}`}>
                 <button 
                   disabled={isPaymentDisabled}
-                  className={`w-full flex items-center justify-center gap-3 py-4 px-6 rounded-xl font-bold text-lg transition-all shadow-md ${
+                  className={`w-full flex items-center justify-center gap-2 sm:gap-3 py-3 sm:py-4 px-4 sm:px-6 rounded-xl font-semibold text-sm sm:text-base lg:text-lg transition-all shadow-md active:scale-[0.98] ${
                     isPaymentDisabled
-                      ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
-                      : 'bg-slate-700 text-white hover:bg-slate-800 hover:shadow-lg hover:scale-[1.02]'
+                      ? 'bg-muted text-muted-foreground cursor-not-allowed'
+                      : 'btn-secondary hover:shadow-lg'
                   }`}
                 >
-                  <Lock className="w-5 h-5" />
-                  Manual Payment
+                  <Lock className="w-4 h-4 sm:w-5 sm:h-5" />
+                  <span>Manual Payment</span>
                 </button>
               </Link>
 
-              <div className="flex items-center justify-center gap-2 text-xs text-slate-500 pt-2">
+              <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground pt-2">
                 <Lock className="w-3 h-3" />
                 Secure payment powered by PayHere
               </div>
