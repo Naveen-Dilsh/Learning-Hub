@@ -290,13 +290,7 @@ export default function CourseDetailsPage() {
                     >
                       Enroll Now
                     </Link>
-                    <button
-                      onClick={handleManualEnroll}
-                      disabled={enrolling}
-                      className="inline-flex items-center gap-2 px-6 py-3 bg-gray-800 text-white rounded hover:bg-gray-900 transition font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {enrolling ? "Enrolling..." : "Manual Enroll"}
-                    </button>
+                    
                   </>
                 )}
               </div>
