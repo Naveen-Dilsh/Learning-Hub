@@ -92,7 +92,7 @@ export default function ImageUpload({ onUploadComplete, currentImage, aspectRati
   const aspectRatioClass = aspectRatio === "video" ? "aspect-video" : "aspect-square"
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3 sm:space-y-4">
       <input
         ref={fileInputRef}
         type="file"
@@ -105,17 +105,25 @@ export default function ImageUpload({ onUploadComplete, currentImage, aspectRati
       {preview ? (
         <div className="relative">
           <div
-            className={`relative w-full ${aspectRatioClass} bg-muted rounded-lg overflow-hidden border border-border`}
+            className={`relative w-full ${aspectRatioClass} bg-muted rounded-lg sm:rounded-xl overflow-hidden border border-border`}
           >
-            <Image src={preview || "/placeholder.svg"} alt="Preview" fill className="object-cover" unoptimized />
+            <Image
+              src={preview || "/placeholder.svg"}
+              alt="Preview"
+              fill
+              className="object-cover"
+              unoptimized
+              sizes="(max-width: 768px) 100vw, 50vw"
+            />
           </div>
           <button
             type="button"
             onClick={handleRemove}
-            className="absolute top-2 right-2 p-1.5 bg-destructive text-destructive-foreground rounded-full hover:opacity-90 transition"
+            className="absolute top-2 right-2 p-1.5 sm:p-2 bg-destructive text-destructive-foreground rounded-full hover:opacity-90 transition active:scale-95"
             disabled={uploading}
+            aria-label="Remove image"
           >
-            <X className="h-4 w-4" />
+            <X className="h-3 w-3 sm:h-4 sm:w-4" />
           </button>
         </div>
       ) : (
@@ -123,24 +131,24 @@ export default function ImageUpload({ onUploadComplete, currentImage, aspectRati
           type="button"
           onClick={() => fileInputRef.current?.click()}
           disabled={uploading}
-          className={`w-full ${aspectRatioClass} border-2 border-dashed border-border rounded-lg flex flex-col items-center justify-center gap-2 hover:border-primary transition bg-muted/50 disabled:opacity-50`}
+          className={`w-full ${aspectRatioClass} border-2 border-dashed border-border rounded-lg sm:rounded-xl flex flex-col items-center justify-center gap-2 p-4 sm:p-6 hover:border-primary transition bg-muted/50 disabled:opacity-50 active:scale-[0.98]`}
         >
           {uploading ? (
             <>
-              <Loader2 className="h-8 w-8 text-primary animate-spin" />
-              <span className="text-sm text-muted-foreground">Uploading...</span>
+              <Loader2 className="h-6 w-6 sm:h-8 sm:w-8 text-primary animate-spin" />
+              <span className="text-xs sm:text-sm text-muted-foreground">Uploading...</span>
             </>
           ) : (
             <>
-              <Upload className="h-8 w-8 text-muted-foreground" />
-              <span className="text-sm text-foreground font-medium">Click to upload image</span>
+              <Upload className="h-6 w-6 sm:h-8 sm:w-8 text-muted-foreground" />
+              <span className="text-xs sm:text-sm text-foreground font-medium">Click to upload image</span>
               <span className="text-xs text-muted-foreground">PNG, JPG up to 10MB</span>
             </>
           )}
         </button>
       )}
 
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {error && <p className="text-xs sm:text-sm text-destructive">{error}</p>}
     </div>
   )
 }

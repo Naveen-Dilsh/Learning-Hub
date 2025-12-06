@@ -1,14 +1,19 @@
 "use client"
 
-
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
-import { useState,useEffect } from "react"
-import { BookOpen, DollarSign, Image, FileText, ArrowLeft, Sparkles, CheckCircle } from "lucide-react"
+import { useState, useEffect, useCallback, useMemo } from "react"
+import { useToast } from "@/hooks/use-toast"
+import Link from "next/link"
+import ImageUpload from "@/components/image-upload"
+import PdfUploader from "@/components/pdf-uploader"
+import LoadingBubbles from "@/components/loadingBubbles"
+import { BookOpen, DollarSign, FileText, ArrowLeft, Sparkles, CheckCircle, FileUp } from "lucide-react"
 
 export default function CreateCourse() {
   const { data: session, status } = useSession()
   const router = useRouter()
+  const { toast } = useToast()
   const [formData, setFormData] = useState({
     title: "",
     description: "",
@@ -16,243 +21,352 @@ export default function CreateCourse() {
     thumbnail: "",
   })
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState("")
+  const [createdCourseId, setCreatedCourseId] = useState(null)
+  const [resourcesRefreshKey, setResourcesRefreshKey] = useState(0)
 
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push("/auth/signin")
+    } else if (status === "authenticated" && session?.user?.role !== "INSTRUCTOR" && session?.user?.role !== "ADMIN") {
+      router.push("/dashboard")
     }
-  }, [status, router])
+  }, [status, session, router])
 
-
-  const handleChange = (e) => {
+  const handleChange = useCallback((e) => {
     const { name, value } = e.target
     setFormData((prev) => ({ ...prev, [name]: value }))
-  }
+  }, [])
 
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-    setError("")
-    setLoading(true)
+  const handleThumbnailUpload = useCallback((imageUrl) => {
+    setFormData((prev) => ({ ...prev, thumbnail: imageUrl }))
+  }, [])
 
-    try {
-      const res = await fetch("/api/courses", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
-      })
+  const isFormValid = useMemo(() => {
+    return formData.title.trim() && formData.description.trim() && formData.price && formData.price > 0
+  }, [formData])
 
-      if (!res.ok) {
+  const handleSubmit = useCallback(
+    async (e) => {
+      e.preventDefault()
+      setLoading(true)
+
+      try {
+        const res = await fetch("/api/courses", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: formData.title.trim(),
+            description: formData.description.trim(),
+            price: Number.parseFloat(formData.price),
+            thumbnail: formData.thumbnail || null,
+          }),
+        })
+
         const data = await res.json()
-        setError(data.message || "Failed to create course")
-        return
-      }
 
-      const course = await res.json()
-      router.push(`/instructor/courses/${course.id}/edit`)
-    } catch (err) {
-      setError("An error occurred. Please try again.")
-    } finally {
-      setLoading(false)
-    }
-  }
+        if (!res.ok) {
+          toast({
+            variant: "destructive",
+            title: "Error",
+            description: data.message || "Failed to create course",
+          })
+          setLoading(false)
+          return
+        }
+
+        toast({
+          title: "Course Created",
+          description: "Your course has been created successfully!",
+        })
+
+        setCreatedCourseId(data.id)
+        // Don't redirect immediately, allow user to upload resources
+      } catch (err) {
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: err.message || "An error occurred. Please try again.",
+        })
+      } finally {
+        setLoading(false)
+      }
+    },
+    [formData, toast]
+  )
+
+  const handleResourceUploadComplete = useCallback(() => {
+    setResourcesRefreshKey((prev) => prev + 1)
+    toast({
+      title: "Resource Uploaded",
+      description: "Resource has been uploaded successfully! Redirecting to your courses...",
+    })
+    // Redirect to courses page after a short delay
+    setTimeout(() => {
+      router.push("/instructor/courses")
+    }, 1500)
+  }, [toast, router])
 
   if (status === "loading") {
-    return <div className="flex items-center justify-center min-h-screen">Loading...</div>
+    return <LoadingBubbles />
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        
+    <div className="min-h-screen bg-background">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
         {/* Header */}
-        <div className="mb-8">
-          <button className="flex items-center gap-2 text-slate-600 hover:text-slate-900 mb-4 transition-colors">
+        <div className="mb-6 sm:mb-8">
+          <Link
+            href="/instructor/dashboard"
+            className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground mb-4 sm:mb-6 transition-colors text-sm sm:text-base"
+          >
             <ArrowLeft className="w-4 h-4" />
-            <span className="text-sm font-medium">Back to Courses</span>
-          </button>
-          
-          <div className="flex items-center gap-3 mb-2">
-            <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
-              <Sparkles className="w-6 h-6 text-blue-600" />
+            <span className="font-medium">Back to Dashboard</span>
+          </Link>
+
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 mb-4">
+            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-primary/10 rounded-xl flex items-center justify-center flex-shrink-0">
+              <Sparkles className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
             </div>
-            <div>
-              <h1 className="text-4xl font-bold text-slate-900">Create New Course</h1>
-              <p className="text-slate-600 mt-1">Share your knowledge with students worldwide</p>
+            <div className="flex-1 min-w-0">
+              <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-foreground">Create New Course</h1>
+              <p className="text-muted-foreground mt-1 text-sm sm:text-base">
+                Share your knowledge with students worldwide
+              </p>
             </div>
           </div>
         </div>
 
         {/* Progress Steps */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center">
-                <span className="text-white font-semibold">1</span>
+        <div className="bg-card rounded-xl sm:rounded-2xl shadow-sm border border-border p-4 sm:p-6 mb-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-2">
+            {/* Step 1: Basic Information */}
+            <div className={`flex items-center gap-3 ${createdCourseId ? "opacity-100" : ""}`}>
+              <div
+                className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
+                  createdCourseId
+                    ? "bg-success text-success-foreground"
+                    : "bg-primary text-primary-foreground"
+                }`}
+              >
+                {createdCourseId ? (
+                  <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5" />
+                ) : (
+                  <span className="font-semibold text-sm sm:text-base">1</span>
+                )}
               </div>
               <div>
-                <p className="font-semibold text-slate-900">Basic Information</p>
-                <p className="text-xs text-slate-600">Course details</p>
+                <p className="font-semibold text-foreground text-sm sm:text-base">Basic Information</p>
+                <p className="text-xs text-muted-foreground">Course details</p>
               </div>
             </div>
-            
-            <div className="hidden sm:block h-px flex-1 bg-slate-200 mx-4"></div>
-            
-            <div className="flex items-center gap-3 opacity-50">
-              <div className="w-10 h-10 bg-slate-200 rounded-full flex items-center justify-center">
-                <span className="text-slate-600 font-semibold">2</span>
+
+            <div
+              className={`hidden sm:block h-px flex-1 mx-2 sm:mx-4 ${
+                createdCourseId ? "bg-success" : "bg-border"
+              }`}
+            ></div>
+
+            {/* Step 2: Add Content Materials */}
+            <div className={`flex items-center gap-3 ${createdCourseId ? "" : "opacity-50"}`}>
+              <div
+                className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
+                  createdCourseId
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted text-muted-foreground"
+                }`}
+              >
+                <span className="font-semibold text-sm sm:text-base">2</span>
               </div>
               <div className="hidden sm:block">
-                <p className="font-semibold text-slate-600">Add Content</p>
-                <p className="text-xs text-slate-600">Videos & materials</p>
+                <p
+                  className={`font-semibold text-sm sm:text-base ${
+                    createdCourseId ? "text-foreground" : "text-muted-foreground"
+                  }`}
+                >
+                  Add Content Materials
+                </p>
+                <p className="text-xs text-muted-foreground">Resources & materials</p>
               </div>
             </div>
-            
-            <div className="hidden sm:block h-px flex-1 bg-slate-200 mx-4"></div>
-            
+
+            <div className="hidden sm:block h-px flex-1 bg-border mx-2 sm:mx-4"></div>
+
+            {/* Step 3: Publish */}
             <div className="flex items-center gap-3 opacity-50">
-              <div className="w-10 h-10 bg-slate-200 rounded-full flex items-center justify-center">
-                <span className="text-slate-600 font-semibold">3</span>
+              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-muted rounded-full flex items-center justify-center flex-shrink-0">
+                <span className="text-muted-foreground font-semibold text-sm sm:text-base">3</span>
               </div>
               <div className="hidden sm:block">
-                <p className="font-semibold text-slate-600">Publish</p>
-                <p className="text-xs text-slate-600">Go live</p>
+                <p className="font-semibold text-muted-foreground text-sm sm:text-base">Publish</p>
+                <p className="text-xs text-muted-foreground">Go live</p>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Error Message */}
-        {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl">
-            <p className="text-red-700 text-sm font-medium">{error}</p>
+        {/* Main Form */}
+        {!createdCourseId ? (
+          <form onSubmit={handleSubmit} className="bg-card rounded-xl sm:rounded-2xl shadow-sm border border-border overflow-hidden mb-6">
+            <div className="p-5 sm:p-6 lg:p-8 space-y-6 sm:space-y-8">
+              {/* Course Title */}
+              <div>
+                <label className="flex items-center gap-2 text-sm sm:text-base font-semibold text-foreground mb-2 sm:mb-3">
+                  <BookOpen className="w-4 h-4 text-primary" />
+                  Course Title
+                </label>
+                <input
+                  type="text"
+                  name="title"
+                  value={formData.title}
+                  onChange={handleChange}
+                  required
+                  className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border border-input rounded-lg sm:rounded-xl focus:outline-none focus:ring-2 focus:ring-ring bg-background text-foreground placeholder:text-muted-foreground transition-all text-sm sm:text-base"
+                  placeholder="e.g., Complete Web Development Bootcamp 2024"
+                />
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Choose a clear, descriptive title that tells students what they'll learn
+                </p>
+              </div>
+
+              {/* Course Description */}
+              <div>
+                <label className="flex items-center gap-2 text-sm sm:text-base font-semibold text-foreground mb-2 sm:mb-3">
+                  <FileText className="w-4 h-4 text-primary" />
+                  Course Description
+                </label>
+                <textarea
+                  name="description"
+                  value={formData.description}
+                  onChange={handleChange}
+                  required
+                  rows={5}
+                  className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border border-input rounded-lg sm:rounded-xl focus:outline-none focus:ring-2 focus:ring-ring bg-background text-foreground placeholder:text-muted-foreground transition-all resize-none text-sm sm:text-base"
+                  placeholder="Describe your course in detail... What will students learn? What makes your course unique? Who is it for?"
+                />
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Write a compelling description that highlights the value and outcomes of your course
+                </p>
+              </div>
+
+              {/* Price and Thumbnail Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+                {/* Price */}
+                <div>
+                  <label className="flex items-center gap-2 text-sm sm:text-base font-semibold text-foreground mb-2 sm:mb-3">
+                    <DollarSign className="w-4 h-4 text-success" />
+                    Course Price (LKR)
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 sm:left-4 top-1/2 transform -translate-y-1/2 text-muted-foreground font-medium text-sm sm:text-base">
+                      Rs.
+                    </span>
+                    <input
+                      type="number"
+                      name="price"
+                      value={formData.price}
+                      onChange={handleChange}
+                      required
+                      min="0"
+                      step="100"
+                      className="w-full pl-10 sm:pl-12 pr-3 sm:pr-4 py-2.5 sm:py-3 border border-input rounded-lg sm:rounded-xl focus:outline-none focus:ring-2 focus:ring-ring bg-background text-foreground placeholder:text-muted-foreground transition-all text-sm sm:text-base"
+                      placeholder="0"
+                    />
+                  </div>
+                  <p className="mt-2 text-xs text-muted-foreground">Set a competitive price for your course</p>
+                </div>
+
+                {/* Thumbnail Upload */}
+                <div>
+                  <label className="flex items-center gap-2 text-sm sm:text-base font-semibold text-foreground mb-2 sm:mb-3">
+                    <FileUp className="w-4 h-4 text-secondary" />
+                    Course Thumbnail
+                  </label>
+                  <ImageUpload
+                    onUploadComplete={handleThumbnailUpload}
+                    currentImage={formData.thumbnail}
+                    aspectRatio="video"
+                  />
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Upload an eye-catching thumbnail image (optional)
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="bg-muted px-5 sm:px-6 lg:px-8 py-4 sm:py-6 border-t border-border flex flex-col sm:flex-row gap-3">
+              <button
+                type="submit"
+                disabled={loading || !isFormValid}
+                className="btn-primary flex-1 sm:flex-initial px-6 sm:px-8 py-2.5 sm:py-3 rounded-lg sm:rounded-xl font-semibold text-sm sm:text-base disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 active:scale-[0.98]"
+              >
+                {loading ? (
+                  <>
+                    <div className="w-4 h-4 sm:w-5 sm:h-5 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin"></div>
+                    Creating Course...
+                  </>
+                ) : (
+                  <>
+                    Create Course
+                    <ArrowLeft className="w-4 h-4 rotate-180" />
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+        ) : (
+          /* Success Message - Course Created */
+          <div className="bg-card rounded-xl sm:rounded-2xl shadow-sm border border-border overflow-hidden mb-6">
+            <div className="p-5 sm:p-6 lg:p-8">
+              <div className="flex items-start gap-4">
+                <div className="w-12 h-12 bg-success/10 rounded-full flex items-center justify-center flex-shrink-0">
+                  <CheckCircle className="w-6 h-6 text-success" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-lg sm:text-xl font-bold text-foreground mb-2">Course Created Successfully!</h3>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Your course "{formData.title}" has been created. You can now upload resources and materials below, or continue editing your course.
+                  </p>
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <Link
+                      href={`/instructor/courses/${createdCourseId}/edit`}
+                      className="btn-primary px-6 py-2.5 sm:py-3 rounded-lg sm:rounded-xl font-semibold text-sm sm:text-base flex items-center justify-center gap-2 active:scale-[0.98]"
+                    >
+                      Continue Editing Course
+                    </Link>
+                    <Link
+                      href="/instructor/dashboard"
+                      className="btn-secondary px-6 py-2.5 sm:py-3 rounded-lg sm:rounded-xl font-semibold text-sm sm:text-base flex items-center justify-center gap-2 active:scale-[0.98]"
+                    >
+                      Back to Dashboard
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
-        {/* Main Form - WRAPPED IN FORM ELEMENT */}
-        <form
-          onSubmit={handleSubmit}
-          className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden"
-        >
-          <div className="p-8 space-y-8">
-            
-            {/* Course Title */}
-            <div>
-              <label className="flex items-center gap-2 text-sm font-semibold text-slate-900 mb-3">
-                <BookOpen className="w-4 h-4 text-blue-600" />
-                Course Title
-              </label>
-              <input
-                type="text"
-                name="title"
-                value={formData.title}
-                onChange={handleChange}
-                required
-                className="w-full px-4 py-3 border-2 border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-slate-900 placeholder:text-slate-400 transition-all"
-                placeholder="e.g., Complete Web Development Bootcamp 2024"
-              />
-              <p className="mt-2 text-xs text-slate-500">Choose a clear, descriptive title that tells students what they'll learn</p>
+        {/* PDF Uploader Section - Show after course creation */}
+        {createdCourseId && (
+          <div className="bg-card rounded-xl sm:rounded-2xl shadow-sm border border-border p-5 sm:p-6 lg:p-8">
+            <div className="flex items-center gap-2 mb-4 sm:mb-6">
+              <FileUp className="w-5 h-5 text-primary" />
+              <h2 className="text-lg sm:text-xl font-bold text-foreground">Upload Course Resources</h2>
             </div>
-
-            {/* Course Description */}
-            <div>
-              <label className="flex items-center gap-2 text-sm font-semibold text-slate-900 mb-3">
-                <FileText className="w-4 h-4 text-blue-600" />
-                Course Description
-              </label>
-              <textarea
-                name="description"
-                value={formData.description}
-                onChange={handleChange}
-                required
-                rows={6}
-                className="w-full px-4 py-3 border-2 border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-slate-900 placeholder:text-slate-400 transition-all resize-none"
-                placeholder="Describe your course in detail... What will students learn? What makes your course unique? Who is it for?"
-              />
-              <p className="mt-2 text-xs text-slate-500">Write a compelling description that highlights the value and outcomes of your course</p>
-            </div>
-
-            {/* Price and Thumbnail Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              
-              {/* Price */}
-              <div>
-                <label className="flex items-center gap-2 text-sm font-semibold text-slate-900 mb-3">
-                  <DollarSign className="w-4 h-4 text-emerald-600" />
-                  Course Price (LKR)
-                </label>
-                <div className="relative">
-                  <span className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-500 font-medium">Rs.</span>
-                  <input
-                    type="number"
-                    name="price"
-                    value={formData.price}
-                    onChange={handleChange}
-                    required
-                    min="0"
-                    step="100"
-                    className="w-full pl-12 pr-4 py-3 border-2 border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-slate-900 placeholder:text-slate-400 transition-all"
-                    placeholder="0"
-                  />
-                </div>
-                <p className="mt-2 text-xs text-slate-500">Set a competitive price for your course</p>
-              </div>
-
-              {/* Thumbnail URL */}
-              <div>
-                <label className="flex items-center gap-2 text-sm font-semibold text-slate-900 mb-3">
-                  <Image className="w-4 h-4 text-purple-600" />
-                  Thumbnail URL
-                </label>
-                <input
-                  type="url"
-                  name="thumbnail"
-                  value={formData.thumbnail}
-                  onChange={handleChange}
-                  className="w-full px-4 py-3 border-2 border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-slate-900 placeholder:text-slate-400 transition-all"
-                  placeholder="https://example.com/image.jpg"
-                />
-                <p className="mt-2 text-xs text-slate-500">Add an eye-catching thumbnail image URL (optional)</p>
-              </div>
-            </div>
-
-            {/* Tips Section */}
-            
+            <PdfUploader
+              key={resourcesRefreshKey}
+              courseId={createdCourseId}
+              onUploadComplete={handleResourceUploadComplete}
+            />
           </div>
-
-          {/* Action Buttons */}
-          <div className="bg-slate-50 px-8 py-6 border-t border-slate-200 flex flex-col sm:flex-row gap-3">
-            <button
-              type="button"
-              className="flex-1 sm:flex-initial sm:order-1 px-6 py-3 border-2 border-slate-300 text-slate-700 rounded-xl font-medium hover:bg-slate-100 transition-all"
-            >
-              Save as Draft
-            </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="flex-1 sm:order-2 px-8 py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-blue-600/20 hover:shadow-xl hover:shadow-blue-600/30 flex items-center justify-center gap-2"
-            >
-              {loading ? (
-                <>
-                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  Creating Course...
-                </>
-              ) : (
-                <>
-                  Create Course
-                  <ArrowLeft className="w-4 h-4 rotate-180" />
-                </>
-              )}
-            </button>
-          </div>
-        </form>
+        )}
 
         {/* Help Text */}
         <div className="mt-6 text-center">
-          <p className="text-sm text-slate-600">
+          <p className="text-sm text-muted-foreground">
             Need help? Check out our{" "}
-            <a href="#" className="text-blue-600 hover:text-blue-700 font-medium">
+            <a href="#" className="text-primary hover:text-primary/80 font-medium transition-colors">
               course creation guide
             </a>
           </p>
@@ -261,3 +375,5 @@ export default function CreateCourse() {
     </div>
   )
 }
+
+

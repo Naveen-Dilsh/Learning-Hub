@@ -2,31 +2,55 @@
 
 import { useSession } from "next-auth/react"
 import { useRouter, useParams } from "next/navigation"
-import { useState, useEffect} from "react"
-import { BookOpen, DollarSign, Image, FileText, ArrowLeft, Save, Eye, EyeOff, Trash2, Video, CheckCircle, AlertCircle } from "lucide-react"
+import { useState, useEffect, useCallback, useMemo } from "react"
+import { useToast } from "@/hooks/use-toast"
 import Link from "next/link"
+import ImageUpload from "@/components/image-upload"
+import CourseResources from "@/components/course-resources"
+import PdfUploader from "@/components/pdf-uploader"
+import LoadingBubbles from "@/components/loadingBubbles"
+import {
+  BookOpen,
+  DollarSign,
+  FileText,
+  ArrowLeft,
+  Save,
+  Eye,
+  EyeOff,
+  Trash2,
+  FileUp,
+  AlertCircle,
+} from "lucide-react"
 
 export default function EditCourse() {
   const { data: session, status } = useSession()
   const router = useRouter()
   const params = useParams()
+  const { toast } = useToast()
   const [formData, setFormData] = useState({
-    title: "Complete Web Development Bootcamp",
-    description: "Learn HTML, CSS, JavaScript, React, Node.js and build real-world projects from scratch. This comprehensive course covers everything you need to become a professional web developer.",
-    price: "15000",
+    title: "",
+    description: "",
+    price: "",
     thumbnail: "",
-    published: true,
+    published: false,
   })
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [error, setError] = useState("")
   const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [resourcesRefreshKey, setResourcesRefreshKey] = useState(0)
 
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push("/auth/signin")
+    } else if (
+      status === "authenticated" &&
+      session?.user?.role !== "INSTRUCTOR" &&
+      session?.user?.role !== "ADMIN"
+    ) {
+      router.push("/dashboard")
     }
-  }, [status, router])
+  }, [status, session, router])
 
   useEffect(() => {
     if (params.id) {
@@ -34,293 +58,396 @@ export default function EditCourse() {
     }
   }, [params.id])
 
-  const fetchCourse = async () => {
+  const fetchCourse = useCallback(async () => {
     try {
-      const res = await fetch(`/api/courses/${params.id}`)
+      const res = await fetch(`/api/courses/${params.id}`, {
+        next: { revalidate: 60 },
+      })
       if (!res.ok) throw new Error("Failed to fetch course")
       const data = await res.json()
-      setFormData(data)
+      setFormData({
+        title: data.title || "",
+        description: data.description || "",
+        price: data.price?.toString() || "",
+        thumbnail: data.thumbnail || "",
+        published: data.published || false,
+      })
     } catch (err) {
-      setError("Failed to load course")
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: err.message || "Failed to load course",
+      })
     } finally {
       setLoading(false)
     }
-  }
+  }, [params.id, toast])
 
-  const handleChange = (e) => {
+  const handleChange = useCallback((e) => {
     const { name, value, type, checked } = e.target
     setFormData((prev) => ({
       ...prev,
       [name]: type === "checkbox" ? checked : value,
     }))
-  }
+  }, [])
 
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-    setError("")
-    setSaving(true)
+  const handleThumbnailUpload = useCallback((imageUrl) => {
+    setFormData((prev) => ({ ...prev, thumbnail: imageUrl }))
+  }, [])
 
+  const isFormValid = useMemo(() => {
+    return formData.title.trim() && formData.description.trim() && formData.price && formData.price > 0
+  }, [formData])
+
+  const handleSubmit = useCallback(
+    async (e) => {
+      e.preventDefault()
+      setSaving(true)
+
+      try {
+        const res = await fetch(`/api/courses/${params.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: formData.title.trim(),
+            description: formData.description.trim(),
+            price: Number.parseFloat(formData.price),
+            thumbnail: formData.thumbnail || null,
+            published: formData.published,
+          }),
+        })
+
+        const data = await res.json()
+
+        if (!res.ok) {
+          toast({
+            variant: "destructive",
+            title: "Error",
+            description: data.message || "Failed to update course",
+          })
+          setSaving(false)
+          return
+        }
+
+        toast({
+          title: "Course Updated",
+          description: "Your course has been updated successfully!",
+        })
+
+        router.push("/instructor/courses")
+      } catch (err) {
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: err.message || "An error occurred. Please try again.",
+        })
+      } finally {
+        setSaving(false)
+      }
+    },
+    [formData, params.id, router, toast]
+  )
+
+  const handlePublishToggle = useCallback(() => {
+    setFormData((prev) => ({ ...prev, published: !prev.published }))
+  }, [])
+
+  const handleDelete = useCallback(async () => {
+    setDeleting(true)
     try {
       const res = await fetch(`/api/courses/${params.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        method: "DELETE",
       })
 
       if (!res.ok) {
         const data = await res.json()
-        setError(data.message || "Failed to update course")
-        return
+        throw new Error(data.message || "Failed to delete course")
       }
+
+      toast({
+        title: "Course Deleted",
+        description: "Course has been deleted successfully",
+      })
 
       router.push("/instructor/courses")
     } catch (err) {
-      setError("An error occurred. Please try again.")
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: err.message || "Failed to delete course",
+      })
     } finally {
-      setSaving(false)
+      setDeleting(false)
+      setShowDeleteModal(false)
     }
-  }
+  }, [params.id, router, toast])
 
-  const handlePublishToggle = () => {
-    setFormData(prev => ({ ...prev, published: !prev.published }))
-  }
+  const handleResourceUploadComplete = useCallback(() => {
+    setResourcesRefreshKey((prev) => prev + 1)
+    toast({
+      title: "Resource Uploaded",
+      description: "Resource has been uploaded successfully!",
+    })
+  }, [toast])
 
   if (status === "loading" || loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-background">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
-          <p className="text-muted-foreground font-medium">Loading...</p>
-        </div>
-      </div>
-    )
+    return <LoadingBubbles />
   }
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
         {/* Header */}
-        <div className="mb-8">
-          <Link href="/instructor/courses">
-            <button className="flex items-center gap-2 text-muted-foreground hover:text-foreground mb-4 transition-colors">
+        <div className="mb-6 sm:mb-8">
+          <Link
+            href="/instructor/courses"
+            className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground mb-4 sm:mb-6 transition-colors text-sm sm:text-base"
+          >
             <ArrowLeft className="w-4 h-4" />
-            <span className="text-sm font-medium">Back to Courses</span>
-            </button>
+            <span className="font-medium">Back to Courses</span>
           </Link>
-          
-          
-          <div className="flex items-center justify-between mb-2">
+
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-blue-500/10 dark:bg-blue-500/20 rounded-xl flex items-center justify-center">
-                <BookOpen className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-primary/10 rounded-xl flex items-center justify-center flex-shrink-0">
+                <BookOpen className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
               </div>
-              <div>
-                <h1 className="text-4xl font-bold text-foreground">Edit Course</h1>
-                <p className="text-muted-foreground mt-1">Update your course details and content</p>
+              <div className="flex-1 min-w-0">
+                <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-foreground">Edit Course</h1>
+                <p className="text-muted-foreground mt-1 text-sm sm:text-base">
+                  Update your course details and content
+                </p>
               </div>
             </div>
 
             {/* Quick Actions */}
-            <div className="hidden sm:flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <button
                 onClick={handlePublishToggle}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all ${
+                className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg font-medium transition-all text-xs sm:text-sm ${
                   formData.published
-                    ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 border border-emerald-200 dark:border-emerald-800"
-                    : "bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 border border-amber-200 dark:border-amber-800"
+                    ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800"
+                    : "bg-chart-5/10 text-chart-5 border border-chart-5/20"
                 }`}
               >
-                {formData.published ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
-                {formData.published ? "Published" : "Draft"}
+                {formData.published ? <Eye className="w-3 h-3 sm:w-4 sm:h-4" /> : <EyeOff className="w-3 h-3 sm:w-4 sm:h-4" />}
+                <span className="hidden sm:inline">{formData.published ? "Published" : "Draft"}</span>
+              </button>
+              <button
+                onClick={() => setShowDeleteModal(true)}
+                className="btn-danger flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg font-medium text-xs sm:text-sm active:scale-[0.98]"
+              >
+                <Trash2 className="w-3 h-3 sm:w-4 sm:h-4" />
+                <span className="hidden sm:inline">Delete</span>
               </button>
             </div>
           </div>
         </div>
 
-
-
-        {/* Error Message */}
-        {error && (
-          <div className="mb-6 p-4 bg-red-500/10 border border-red-200 dark:border-red-800 rounded-xl flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
-            <p className="text-red-700 dark:text-red-400 text-sm font-medium">{error}</p>
-          </div>
-        )}
-
         {/* Main Form */}
-        <div className="mb-6">
-          <div>
-            <form onSubmit={handleSubmit} className="bg-card rounded-2xl shadow-sm border border-border overflow-hidden">
-              <div className="p-8 space-y-8">
-                
-                {/* Course Title */}
-                <div>
-                  <label className="flex items-center gap-2 text-sm font-semibold text-foreground mb-3">
-                    <BookOpen className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                    Course Title
-                  </label>
+        <form onSubmit={handleSubmit} className="bg-card rounded-xl sm:rounded-2xl shadow-sm border border-border overflow-hidden mb-6">
+          <div className="p-5 sm:p-6 lg:p-8 space-y-6 sm:space-y-8">
+            {/* Course Title */}
+            <div>
+              <label className="flex items-center gap-2 text-sm sm:text-base font-semibold text-foreground mb-2 sm:mb-3">
+                <BookOpen className="w-4 h-4 text-primary" />
+                Course Title
+              </label>
+              <input
+                type="text"
+                name="title"
+                value={formData.title}
+                onChange={handleChange}
+                required
+                className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border border-input rounded-lg sm:rounded-xl focus:outline-none focus:ring-2 focus:ring-ring bg-background text-foreground placeholder:text-muted-foreground transition-all text-sm sm:text-base"
+                placeholder="e.g., Complete Web Development Bootcamp 2024"
+              />
+            </div>
+
+            {/* Course Description */}
+            <div>
+              <label className="flex items-center gap-2 text-sm sm:text-base font-semibold text-foreground mb-2 sm:mb-3">
+                <FileText className="w-4 h-4 text-primary" />
+                Course Description
+              </label>
+              <textarea
+                name="description"
+                value={formData.description}
+                onChange={handleChange}
+                required
+                rows={5}
+                className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border border-input rounded-lg sm:rounded-xl focus:outline-none focus:ring-2 focus:ring-ring bg-background text-foreground placeholder:text-muted-foreground transition-all resize-none text-sm sm:text-base"
+                placeholder="Describe your course in detail..."
+              />
+            </div>
+
+            {/* Price and Thumbnail Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+              {/* Price */}
+              <div>
+                <label className="flex items-center gap-2 text-sm sm:text-base font-semibold text-foreground mb-2 sm:mb-3">
+                  <DollarSign className="w-4 h-4 text-success" />
+                  Course Price (LKR)
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 sm:left-4 top-1/2 transform -translate-y-1/2 text-muted-foreground font-medium text-sm sm:text-base">
+                    Rs.
+                  </span>
                   <input
-                    type="text"
-                    name="title"
-                    value={formData.title}
+                    type="number"
+                    name="price"
+                    value={formData.price}
                     onChange={handleChange}
                     required
-                    className="w-full px-4 py-3 border-2 border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent bg-background text-foreground placeholder:text-muted-foreground transition-all"
-                    placeholder="e.g., Complete Web Development Bootcamp 2024"
+                    min="0"
+                    step="100"
+                    className="w-full pl-10 sm:pl-12 pr-3 sm:pr-4 py-2.5 sm:py-3 border border-input rounded-lg sm:rounded-xl focus:outline-none focus:ring-2 focus:ring-ring bg-background text-foreground placeholder:text-muted-foreground transition-all text-sm sm:text-base"
+                    placeholder="0"
                   />
-                </div>
-
-                {/* Course Description */}
-                <div>
-                  <label className="flex items-center gap-2 text-sm font-semibold text-foreground mb-3">
-                    <FileText className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                    Course Description
-                  </label>
-                  <textarea
-                    name="description"
-                    value={formData.description}
-                    onChange={handleChange}
-                    required
-                    rows={6}
-                    className="w-full px-4 py-3 border-2 border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent bg-background text-foreground placeholder:text-muted-foreground transition-all resize-none"
-                    placeholder="Describe your course in detail..."
-                  />
-                </div>
-
-                {/* Price and Thumbnail Grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                  
-                  {/* Price */}
-                  <div>
-                    <label className="flex items-center gap-2 text-sm font-semibold text-foreground mb-3">
-                      <DollarSign className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                      Course Price (LKR)
-                    </label>
-                    <div className="relative">
-                      <span className="absolute left-4 top-1/2 transform -translate-y-1/2 text-muted-foreground font-medium">Rs.</span>
-                      <input
-                        type="number"
-                        name="price"
-                        value={formData.price}
-                        onChange={handleChange}
-                        required
-                        min="0"
-                        step="100"
-                        className="w-full pl-12 pr-4 py-3 border-2 border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent bg-background text-foreground placeholder:text-muted-foreground transition-all"
-                        placeholder="0"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Thumbnail URL */}
-                  <div>
-                    <label className="flex items-center gap-2 text-sm font-semibold text-foreground mb-3">
-                      <Image className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-                      Thumbnail URL
-                    </label>
-                    <input
-                      type="url"
-                      name="thumbnail"
-                      value={formData.thumbnail}
-                      onChange={handleChange}
-                      className="w-full px-4 py-3 border-2 border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent bg-background text-foreground placeholder:text-muted-foreground transition-all"
-                      placeholder="https://example.com/image.jpg"
-                    />
-                  </div>
-                </div>
-
-                {/* Publish Toggle */}
-                <div className="bg-muted border border-border rounded-xl p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-start gap-3">
-                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                        formData.published ? "bg-emerald-500/10 dark:bg-emerald-500/20" : "bg-amber-500/10 dark:bg-amber-500/20"
-                      }`}>
-                        {formData.published ? 
-                          <Eye className="w-5 h-5 text-emerald-600 dark:text-emerald-400" /> : 
-                          <EyeOff className="w-5 h-5 text-amber-600 dark:text-amber-400" />
-                        }
-                      </div>
-                      <div>
-                        <p className="font-semibold text-foreground">Course Visibility</p>
-                        <p className="text-sm text-muted-foreground mt-0.5">
-                          {formData.published 
-                            ? "This course is live and visible to students"
-                            : "This course is in draft mode and not visible to students"
-                          }
-                        </p>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={handlePublishToggle}
-                      className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors ${
-                        formData.published ? "bg-emerald-600 dark:bg-emerald-500" : "bg-muted-foreground/30"
-                      }`}
-                    >
-                      <span
-                        className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-lg transition-transform ${
-                          formData.published ? "translate-x-6" : "translate-x-1"
-                        }`}
-                      />
-                    </button>
-                  </div>
                 </div>
               </div>
 
-              {/* Action Buttons */}
-              <div className="bg-muted px-8 py-6 border-t border-border flex flex-col sm:flex-row gap-3">
+              {/* Thumbnail Upload */}
+              <div>
+                <label className="flex items-center gap-2 text-sm sm:text-base font-semibold text-foreground mb-2 sm:mb-3">
+                  <FileUp className="w-4 h-4 text-secondary" />
+                  Course Thumbnail
+                </label>
+                <ImageUpload
+                  onUploadComplete={handleThumbnailUpload}
+                  currentImage={formData.thumbnail}
+                  aspectRatio="video"
+                />
+              </div>
+            </div>
+
+            {/* Publish Toggle */}
+            <div className="bg-muted border border-border rounded-lg sm:rounded-xl p-4 sm:p-6">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div className="flex items-start gap-3">
+                  <div
+                    className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                      formData.published
+                        ? "bg-emerald-500/10 dark:bg-emerald-500/20"
+                        : "bg-chart-5/10"
+                    }`}
+                  >
+                    {formData.published ? (
+                      <Eye className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                    ) : (
+                      <EyeOff className="w-5 h-5 text-chart-5" />
+                    )}
+                  </div>
+                  <div>
+                    <p className="font-semibold text-foreground text-sm sm:text-base">Course Visibility</p>
+                    <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
+                      {formData.published
+                        ? "This course is live and visible to students"
+                        : "This course is in draft mode and not visible to students"}
+                    </p>
+                  </div>
+                </div>
                 <button
                   type="button"
-                  onClick={handleSubmit}
-                  disabled={saving}
-                  className="flex-1 px-8 py-3 bg-primary text-primary-foreground rounded-xl font-medium hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg hover:shadow-xl flex items-center justify-center gap-2"
+                  onClick={handlePublishToggle}
+                  className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors flex-shrink-0 ${
+                    formData.published
+                      ? "bg-emerald-600 dark:bg-emerald-500"
+                      : "bg-muted-foreground/30"
+                  }`}
                 >
-                  {saving ? (
-                    <>
-                      <div className="w-5 h-5 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin"></div>
-                      Saving Changes...
-                    </>
-                  ) : (
-                    <>
-                      <Save className="w-4 h-4" />
-                      Save Changes
-                    </>
-                  )}
-                </button>
-                <button
-                  type="button"
-                  className="flex-1 sm:flex-initial px-6 py-3 border-2 border-border text-foreground rounded-xl font-medium hover:bg-muted transition-all"
-                >
-                  Cancel
+                  <span
+                    className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-lg transition-transform ${
+                      formData.published ? "translate-x-6" : "translate-x-1"
+                    }`}
+                  />
                 </button>
               </div>
-            </form>
+            </div>
           </div>
+
+          {/* Action Buttons */}
+          <div className="bg-muted px-5 sm:px-6 lg:px-8 py-4 sm:py-6 border-t border-border flex flex-col sm:flex-row gap-3">
+            <button
+              type="submit"
+              disabled={saving || !isFormValid}
+              className="btn-primary flex-1 px-6 sm:px-8 py-2.5 sm:py-3 rounded-lg sm:rounded-xl font-semibold text-sm sm:text-base disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 active:scale-[0.98]"
+            >
+              {saving ? (
+                <>
+                  <div className="w-4 h-4 sm:w-5 sm:h-5 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin"></div>
+                  Saving Changes...
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4" />
+                  Save Changes
+                </>
+              )}
+            </button>
+            <Link
+              href="/instructor/courses"
+              className="btn-secondary flex-1 sm:flex-initial px-6 py-2.5 sm:py-3 rounded-lg sm:rounded-xl font-semibold text-sm sm:text-base flex items-center justify-center active:scale-[0.98]"
+            >
+              Cancel
+            </Link>
+          </div>
+        </form>
+
+        {/* Course Resources Section */}
+        <div className="bg-card rounded-xl sm:rounded-2xl shadow-sm border border-border p-5 sm:p-6 lg:p-8 mb-6">
+          <div className="flex items-center gap-2 mb-4 sm:mb-6">
+            <FileUp className="w-5 h-5 text-primary" />
+            <h2 className="text-lg sm:text-xl font-bold text-foreground">Course Resources</h2>
+          </div>
+          <CourseResources key={resourcesRefreshKey} courseId={params.id} />
+        </div>
+
+        {/* Upload New Resource */}
+        <div className="bg-card rounded-xl sm:rounded-2xl shadow-sm border border-border p-5 sm:p-6 lg:p-8">
+          <div className="flex items-center gap-2 mb-4 sm:mb-6">
+            <FileUp className="w-5 h-5 text-primary" />
+            <h2 className="text-lg sm:text-xl font-bold text-foreground">Upload New Resource</h2>
+          </div>
+          <PdfUploader courseId={params.id} onUploadComplete={handleResourceUploadComplete} />
         </div>
       </div>
 
       {/* Delete Confirmation Modal */}
       {showDeleteModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-card rounded-2xl shadow-xl max-w-md w-full p-6 border border-border">
-            <div className="w-12 h-12 bg-red-500/10 dark:bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Trash2 className="w-6 h-6 text-red-600 dark:text-red-400" />
+          <div className="bg-card rounded-xl sm:rounded-2xl shadow-xl max-w-md w-full p-5 sm:p-6 border border-border">
+            <div className="w-12 h-12 bg-destructive/10 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Trash2 className="w-6 h-6 text-destructive" />
             </div>
-            <h3 className="text-xl font-bold text-foreground text-center mb-2">Delete Course?</h3>
-            <p className="text-muted-foreground text-center mb-6">
-              This action cannot be undone. All course data, videos, and student enrollments will be permanently deleted.
+            <h3 className="text-lg sm:text-xl font-bold text-foreground text-center mb-2">Delete Course?</h3>
+            <p className="text-sm sm:text-base text-muted-foreground text-center mb-6">
+              This action cannot be undone. All course data, videos, and student enrollments will be permanently
+              deleted.
             </p>
-            <div className="flex gap-3">
+            <div className="flex flex-col sm:flex-row gap-3">
               <button
                 onClick={() => setShowDeleteModal(false)}
-                className="flex-1 px-4 py-2.5 border-2 border-border text-foreground rounded-lg font-medium hover:bg-muted transition-all"
+                className="btn-secondary flex-1 px-4 py-2.5 rounded-lg font-medium active:scale-[0.98]"
               >
                 Cancel
               </button>
-              <button className="flex-1 px-4 py-2.5 bg-red-600 dark:bg-red-500 text-white rounded-lg font-medium hover:opacity-90 transition-all">
-                Delete Course
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                className="btn-danger flex-1 px-4 py-2.5 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] flex items-center justify-center gap-2"
+              >
+                {deleting ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-destructive-foreground border-t-transparent rounded-full animate-spin"></div>
+                    Deleting...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    Delete Course
+                  </>
+                )}
               </button>
             </div>
           </div>

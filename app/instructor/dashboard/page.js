@@ -2,13 +2,108 @@
 
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback, useMemo, memo } from "react"
+import { useToast } from "@/hooks/use-toast"
 import Link from "next/link"
+import LoadingBubbles from "@/components/loadingBubbles"
 import { BookOpen, Users, CheckCircle, DollarSign, Plus, Edit, Video, TrendingUp } from "lucide-react"
+
+// Memoized Course Card Component
+const CourseCard = memo(({ course }) => {
+  const totalEarnings = useMemo(
+    () => course.price * course._count.enrollments,
+    [course.price, course._count.enrollments]
+  )
+
+  return (
+    <div className="bg-card rounded-xl border border-border p-4 sm:p-6 hover:shadow-lg transition-all group">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3 sm:gap-4 mb-4">
+        <div className="flex-1 min-w-0">
+          <h3 className="font-bold text-base sm:text-lg text-foreground mb-2 line-clamp-2 group-hover:text-primary transition-colors">
+            {course.title}
+          </h3>
+          <div className="flex flex-wrap items-center gap-3 sm:gap-4 text-xs sm:text-sm text-muted-foreground">
+            <span className="flex items-center gap-1">
+              <Users className="w-3 h-3 sm:w-4 sm:h-4" />
+              {course._count.enrollments} students
+            </span>
+            <span className="flex items-center gap-1">
+              <Video className="w-3 h-3 sm:w-4 sm:h-4" />
+              {course._count.videos} videos
+            </span>
+          </div>
+        </div>
+        <span
+          className={`px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap flex-shrink-0 ${
+            course.published
+              ? "bg-success/10 text-success border border-success/20"
+              : "bg-chart-5/10 text-chart-5 border border-chart-5/20"
+          }`}
+        >
+          {course.published ? "Published" : "Draft"}
+        </span>
+      </div>
+
+      <p className="text-xs sm:text-sm text-muted-foreground mb-4 line-clamp-2 leading-relaxed">
+        {course.description}
+      </p>
+
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 mb-4 sm:mb-5 p-3 sm:p-4 bg-muted rounded-lg border border-border">
+        <div>
+          <p className="text-xs text-muted-foreground mb-1">Course Price</p>
+          <p className="text-base sm:text-lg font-bold text-foreground">Rs. {course.price.toLocaleString()}</p>
+        </div>
+        <div className="text-left sm:text-right">
+          <p className="text-xs text-muted-foreground mb-1">Total Earnings</p>
+          <p className="text-base sm:text-lg font-bold text-success">
+            Rs. {totalEarnings.toLocaleString()}
+          </p>
+        </div>
+      </div>
+
+      <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+        <Link
+          href={`/instructor/courses/${course.id}/edit`}
+          className="btn-primary flex-1 flex items-center justify-center gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg text-xs sm:text-sm font-medium active:scale-[0.98]"
+        >
+          <Edit className="w-3 h-3 sm:w-4 sm:h-4" />
+          Edit Course
+        </Link>
+        <Link
+          href={`/instructor/courses/${course.id}/videos`}
+          className="btn-secondary flex-1 flex items-center justify-center gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg text-xs sm:text-sm font-medium active:scale-[0.98]"
+        >
+          <Video className="w-3 h-3 sm:w-4 sm:h-4" />
+          Manage Videos
+        </Link>
+      </div>
+    </div>
+  )
+})
+
+CourseCard.displayName = "CourseCard"
+
+// Memoized Stat Card Component
+const StatCard = memo(({ stat }) => (
+  <div className="bg-card rounded-xl sm:rounded-2xl shadow-sm hover:shadow-md transition-all border border-border overflow-hidden group">
+    <div className="p-4 sm:p-6">
+      <div className="flex items-center justify-between mb-3 sm:mb-4">
+        <div className={`w-12 h-12 sm:w-14 sm:h-14 ${stat.bgColor} rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform border border-border`}>
+          <stat.icon className={`w-6 h-6 sm:w-7 sm:h-7 ${stat.iconColor}`} />
+        </div>
+      </div>
+      <p className="text-muted-foreground text-xs sm:text-sm font-medium mb-1">{stat.label}</p>
+      <p className="text-2xl sm:text-3xl font-bold text-foreground">{stat.value}</p>
+    </div>
+  </div>
+))
+
+StatCard.displayName = "StatCard"
 
 export default function InstructorDashboard() {
   const { data: session, status } = useSession()
   const router = useRouter()
+  const { toast } = useToast()
   const [stats, setStats] = useState({
     totalCourses: 0,
     totalStudents: 0,
@@ -26,223 +121,143 @@ export default function InstructorDashboard() {
     }
   }, [status, session, router])
 
-  useEffect(() => {
-    if (session?.user?.id) {
-      fetchDashboardData()
-    }
-  }, [session])
+  const fetchDashboardData = useCallback(async () => {
+    if (!session?.user?.id) return
 
-  const fetchDashboardData = async () => {
     try {
-      const res = await fetch(`/api/instructor/dashboard?instructorId=${session.user.id}`)
+      const res = await fetch(`/api/instructor/dashboard?instructorId=${session.user.id}`, {
+        next: { revalidate: 60 },
+      })
       if (!res.ok) throw new Error("Failed to fetch dashboard data")
       const data = await res.json()
       setStats(data.stats)
       setCourses(data.courses)
     } catch (error) {
       console.error("Error fetching dashboard data:", error)
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to load dashboard data. Please try again.",
+      })
     } finally {
       setLoading(false)
     }
-  }
+  }, [session?.user?.id, toast])
+
+  useEffect(() => {
+    if (session?.user?.id) {
+      fetchDashboardData()
+    }
+  }, [session?.user?.id, fetchDashboardData])
+
+  const statCards = useMemo(
+    () => [
+      {
+        label: "Total Courses",
+        value: stats.totalCourses,
+        icon: BookOpen,
+        bgColor: "bg-primary/10",
+        iconColor: "text-primary",
+      },
+      {
+        label: "Total Students",
+        value: stats.totalStudents,
+        icon: Users,
+        bgColor: "bg-success/10",
+        iconColor: "text-success",
+      },
+      {
+        label: "Total Enrollments",
+        value: stats.totalEnrollments,
+        icon: CheckCircle,
+        bgColor: "bg-secondary/10",
+        iconColor: "text-secondary",
+      },
+      {
+        label: "Total Earnings",
+        value: `Rs. ${stats.totalEarnings.toLocaleString()}`,
+        icon: DollarSign,
+        bgColor: "bg-chart-5/10",
+        iconColor: "text-chart-5",
+      },
+    ],
+    [stats]
+  )
 
   if (status === "loading" || loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-background">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
-          <p className="text-muted-foreground font-medium">Loading your dashboard...</p>
-        </div>
-      </div>
-    )
+    return <LoadingBubbles />
   }
-
-  const statCards = [
-    {
-      label: "Total Courses",
-      value: stats.totalCourses,
-      icon: BookOpen,
-      color: "blue",
-      bgColor: "bg-blue-500/10 dark:bg-blue-500/20",
-      iconColor: "text-blue-600 dark:text-blue-400",
-      borderColor: "border-blue-200 dark:border-blue-800"
-    },
-    {
-      label: "Total Students",
-      value: stats.totalStudents,
-      icon: Users,
-      color: "emerald",
-      bgColor: "bg-emerald-500/10 dark:bg-emerald-500/20",
-      iconColor: "text-emerald-600 dark:text-emerald-400",
-      borderColor: "border-emerald-200 dark:border-emerald-800"
-    },
-    {
-      label: "Total Enrollments",
-      value: stats.totalEnrollments,
-      icon: CheckCircle,
-      color: "purple",
-      bgColor: "bg-purple-500/10 dark:bg-purple-500/20",
-      iconColor: "text-purple-600 dark:text-purple-400",
-      borderColor: "border-purple-200 dark:border-purple-800"
-    },
-    {
-      label: "Total Earnings",
-      value: `Rs. ${stats.totalEarnings.toLocaleString()}`,
-      icon: DollarSign,
-      color: "amber",
-      bgColor: "bg-amber-500/10 dark:bg-amber-500/20",
-      iconColor: "text-amber-600 dark:text-amber-400",
-      borderColor: "border-amber-200 dark:border-amber-800"
-    }
-  ]
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
         {/* Header */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-4xl font-bold text-foreground mb-2">
+        <div className="mb-6 sm:mb-8">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="flex-1 min-w-0">
+              <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-foreground mb-2">
                 Welcome back, {session?.user?.name || "Instructor"}
               </h1>
-              <p className="text-muted-foreground flex items-center gap-2">
-                <TrendingUp className="w-4 h-4" />
-                Track your teaching performance and manage your courses
+              <p className="text-muted-foreground flex items-center gap-2 text-sm sm:text-base">
+                <TrendingUp className="w-4 h-4 flex-shrink-0" />
+                <span>Track your teaching performance and manage your courses</span>
               </p>
             </div>
             <Link
               href="/instructor/courses/create"
-              className="hidden sm:flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-xl hover:opacity-90 transition-all shadow-lg hover:shadow-xl"
+              className="btn-primary hidden sm:flex items-center gap-2 px-4 sm:px-6 py-2.5 sm:py-3 rounded-lg sm:rounded-xl text-sm sm:text-base font-semibold shadow-lg hover:shadow-xl active:scale-[0.98] whitespace-nowrap"
             >
-              <Plus className="w-5 h-5" />
+              <Plus className="w-4 h-4 sm:w-5 sm:h-5" />
               Create Course
             </Link>
           </div>
         </div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-8 sm:mb-12">
           {statCards.map((stat, index) => (
-            <div
-              key={index}
-              className={`bg-card rounded-2xl shadow-sm hover:shadow-md transition-all border ${stat.borderColor} overflow-hidden group`}
-            >
-              <div className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div className={`w-14 h-14 ${stat.bgColor} rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform`}>
-                    <stat.icon className={`w-7 h-7 ${stat.iconColor}`} />
-                  </div>
-                </div>
-                <p className="text-muted-foreground text-sm font-medium mb-1">{stat.label}</p>
-                <p className="text-3xl font-bold text-foreground">{stat.value}</p>
-              </div>
-            </div>
+            <StatCard key={index} stat={stat} />
           ))}
         </div>
 
         {/* Courses Section */}
-        <div className="bg-card rounded-2xl shadow-sm border border-border overflow-hidden">
-          <div className="px-8 py-6 border-b border-border flex items-center justify-between">
-            <div>
-              <h2 className="text-2xl font-bold text-foreground">Your Courses</h2>
-              <p className="text-muted-foreground text-sm mt-1">Manage and monitor your course catalog</p>
+        <div className="bg-card rounded-xl sm:rounded-2xl shadow-sm border border-border overflow-hidden">
+          <div className="px-4 sm:px-6 lg:px-8 py-4 sm:py-6 border-b border-border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="flex-1 min-w-0">
+              <h2 className="text-xl sm:text-2xl font-bold text-foreground">Your Courses</h2>
+              <p className="text-muted-foreground text-xs sm:text-sm mt-1">Manage and monitor your course catalog</p>
             </div>
             <Link
               href="/instructor/courses/create"
-              className="sm:hidden flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-90 transition-all text-sm"
+              className="btn-primary sm:hidden flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold active:scale-[0.98]"
             >
               <Plus className="w-4 h-4" />
-              New
+              New Course
             </Link>
           </div>
 
-          <div className="p-8">
+          <div className="p-4 sm:p-6 lg:p-8">
             {courses.length === 0 ? (
-              <div className="text-center py-16">
-                <div className="w-20 h-20 bg-muted rounded-full flex items-center justify-center mx-auto mb-6">
-                  <BookOpen className="w-10 h-10 text-muted-foreground" />
+              <div className="text-center py-12 sm:py-16">
+                <div className="w-16 h-16 sm:w-20 sm:h-20 bg-muted rounded-full flex items-center justify-center mx-auto mb-4 sm:mb-6">
+                  <BookOpen className="w-8 h-8 sm:w-10 sm:h-10 text-muted-foreground" />
                 </div>
-                <h3 className="text-xl font-semibold text-foreground mb-2">No courses yet</h3>
-                <p className="text-muted-foreground mb-6 max-w-md mx-auto">
+                <h3 className="text-lg sm:text-xl font-semibold text-foreground mb-2">No courses yet</h3>
+                <p className="text-muted-foreground mb-6 max-w-md mx-auto text-sm sm:text-base px-4">
                   Start your teaching journey by creating your first course and sharing your knowledge with students worldwide
                 </p>
                 <Link
                   href="/instructor/courses/create"
-                  className="inline-flex items-center gap-2 px-8 py-3 bg-primary text-primary-foreground rounded-xl hover:opacity-90 transition-all shadow-lg"
+                  className="btn-primary inline-flex items-center gap-2 px-6 sm:px-8 py-2.5 sm:py-3 rounded-lg sm:rounded-xl text-sm sm:text-base font-semibold shadow-lg active:scale-[0.98]"
                 >
-                  <Plus className="w-5 h-5" />
+                  <Plus className="w-4 h-4 sm:w-5 sm:h-5" />
                   Create Your First Course
                 </Link>
               </div>
             ) : (
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
                 {courses.map((course) => (
-                  <div
-                    key={course.id}
-                    className="bg-card rounded-xl border border-border p-6 hover:shadow-lg transition-all group"
-                  >
-                    <div className="flex justify-between items-start mb-4">
-                      <div className="flex-1 pr-4">
-                        <h3 className="font-bold text-lg text-foreground mb-2 line-clamp-2 group-hover:text-primary transition-colors">
-                          {course.title}
-                        </h3>
-                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                          <span className="flex items-center gap-1">
-                            <Users className="w-4 h-4" />
-                            {course._count.enrollments} students
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <Video className="w-4 h-4" />
-                            {course._count.videos} videos
-                          </span>
-                        </div>
-                      </div>
-                      <span
-                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap ${
-                          course.published
-                            ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800"
-                            : "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800"
-                        }`}
-                      >
-                        {course.published ? "Published" : "Draft"}
-                      </span>
-                    </div>
-
-                    <p className="text-sm text-muted-foreground mb-4 line-clamp-2 leading-relaxed">
-                      {course.description}
-                    </p>
-
-                    <div className="flex items-center justify-between mb-5 p-4 bg-muted rounded-lg border border-border">
-                      <div>
-                        <p className="text-xs text-muted-foreground mb-1">Course Price</p>
-                        <p className="text-lg font-bold text-foreground">Rs. {course.price.toLocaleString()}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-xs text-muted-foreground mb-1">Total Earnings</p>
-                        <p className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
-                          Rs. {(course.price * course._count.enrollments).toLocaleString()}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex gap-3">
-                      <Link
-                        href={`/instructor/courses/${course.id}/edit`}
-                        className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 transition-all"
-                      >
-                        <Edit className="w-4 h-4" />
-                        Edit Course
-                      </Link>
-                      <Link
-                        href={`/instructor/courses/${course.id}/videos`}
-                        className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 border-2 border-border text-foreground rounded-lg text-sm font-medium hover:bg-muted transition-all"
-                      >
-                        <Video className="w-4 h-4" />
-                        Manage Videos
-                      </Link>
-                    </div>
-                  </div>
+                  <CourseCard key={course.id} course={course} />
                 ))}
               </div>
             )}

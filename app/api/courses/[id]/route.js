@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db"
+import { performanceLogger } from "@/lib/performance-logger"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { NextResponse } from "next/server"
@@ -82,45 +83,100 @@ export async function GET(request, { params }) {
 }
 
 export async function PUT(request, { params }) {
+  const routeTimer = performanceLogger.startTimer('PUT /api/courses/[id]')
+  const dbTimer = performanceLogger.startTimer('DB Queries')
+
   try {
     const session = await getServerSession(authOptions)
 
     if (!session) {
+      routeTimer.stop()
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
     }
 
     const course = await prisma.course.findUnique({
       where: { id: params.id },
+      select: { id: true, instructorId: true },
     })
 
     if (!course) {
+      routeTimer.stop()
       return NextResponse.json({ message: "Course not found" }, { status: 404 })
     }
 
     if (course.instructorId !== session.user.id && session.user.role !== "ADMIN") {
+      routeTimer.stop()
       return NextResponse.json({ message: "Forbidden" }, { status: 403 })
     }
 
     const { title, description, price, thumbnail, published } = await request.json()
 
+    // Validate input
+    if (title && title.trim().length < 3) {
+      routeTimer.stop()
+      return NextResponse.json({ message: "Title must be at least 3 characters" }, { status: 400 })
+    }
+
+    if (description && description.trim().length < 10) {
+      routeTimer.stop()
+      return NextResponse.json({ message: "Description must be at least 10 characters" }, { status: 400 })
+    }
+
+    if (price !== undefined && Number.parseFloat(price) < 0) {
+      routeTimer.stop()
+      return NextResponse.json({ message: "Price must be a positive number" }, { status: 400 })
+    }
+
     const updatedCourse = await prisma.course.update({
       where: { id: params.id },
       data: {
-        ...(title && { title }),
-        ...(description && { description }),
+        ...(title && { title: title.trim() }),
+        ...(description && { description: description.trim() }),
         ...(price !== undefined && { price: Number.parseFloat(price) }),
-        ...(thumbnail && { thumbnail }),
+        ...(thumbnail !== undefined && { thumbnail: thumbnail?.trim() || null }),
         ...(published !== undefined && { published }),
+      },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        price: true,
+        thumbnail: true,
+        published: true,
+        instructorId: true,
+        updatedAt: true,
       },
     })
 
     // Invalidate cache
     revalidateTag('courses')
 
+    const dbTime = dbTimer.stop()
+    const totalTime = routeTimer.stop()
+
+    performanceLogger.logAPIRoute('PUT', `/api/courses/${params.id}`, totalTime, {
+      status: 200,
+      dbTime,
+      courseId: params.id,
+    })
+
     return NextResponse.json(updatedCourse)
   } catch (error) {
+    const totalTime = routeTimer.stop()
+    const dbTime = dbTimer.duration || 0
+
     console.error("Error updating course:", error)
-    return NextResponse.json({ message: "Internal server error" }, { status: 500 })
+
+    performanceLogger.logAPIRoute('PUT', `/api/courses/${params.id}`, totalTime, {
+      status: 500,
+      dbTime,
+      error: error.message,
+    })
+
+    return NextResponse.json(
+      { message: error.message || "Internal server error" },
+      { status: 500 }
+    )
   }
 }
 
