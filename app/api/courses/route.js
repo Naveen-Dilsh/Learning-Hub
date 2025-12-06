@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { NextResponse } from "next/server"
 import { unstable_cache, revalidateTag } from "next/cache"
+import { performanceLogger } from "@/lib/performance-logger"
 
 // Cached function to fetch published courses
 const getCachedCourses = unstable_cache(
@@ -41,6 +42,9 @@ const getCachedCourses = unstable_cache(
 )
 
 export async function GET(request) {
+  const routeTimer = performanceLogger.startTimer('GET /api/courses')
+  const dbTimer = performanceLogger.startTimer('DB Queries')
+  
   try {
     const { searchParams } = new URL(request.url)
     const instructorId = searchParams.get("instructorId")
@@ -84,9 +88,30 @@ export async function GET(request) {
       })
     }
 
+    const dbTime = dbTimer.stop()
+    const totalTime = routeTimer.stop()
+
+    // Log performance
+    performanceLogger.logAPIRoute('GET', '/api/courses', totalTime, {
+      status: 200,
+      dbTime,
+      cached: published === "true" && !instructorId,
+      count: courses.length,
+    })
+
     return NextResponse.json(courses)
   } catch (error) {
+    const totalTime = routeTimer.stop()
+    const dbTime = dbTimer.duration || 0
+
     console.error("Error fetching courses:", error)
+    
+    performanceLogger.logAPIRoute('GET', '/api/courses', totalTime, {
+      status: 500,
+      dbTime,
+      error: error.message,
+    })
+
     return NextResponse.json({ message: "Internal server error" }, { status: 500 })
   }
 }

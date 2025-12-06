@@ -20,6 +20,7 @@ import {
   Menu,
   X,
   Search,
+  Package,
 } from "lucide-react"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { useState, useMemo, useCallback } from "react"
@@ -36,6 +37,7 @@ export function StudentSidebar() {
     { href: "/student/courses", label: "My Courses", icon: BookOpen, gradient: "from-accent to-primary" },
     { href: "/student/browse-course", label: "Browse Courses", icon: Search, gradient: "from-primary to-secondary" },
     { href: "/student/payments", label: "Payments", icon: CreditCard, gradient: "from-secondary to-accent" },
+    { href: "/student/deliveries", label: "Deliveries", icon: Package, gradient: "from-accent to-primary" },
     { href: "/student/certificates", label: "Certificates", icon: Award, gradient: "from-accent to-secondary" },
     { href: "/student/leaderboard", label: "Leaderboard", icon: Trophy, gradient: "from-primary to-accent" },
     { href: "/student/wishlist", label: "Wishlist", icon: Heart, gradient: "from-accent to-primary" },

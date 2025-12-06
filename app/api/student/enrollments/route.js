@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { NextResponse } from "next/server"
 import { unstable_cache } from "next/cache"
+import { performanceLogger } from "@/lib/performance-logger"
 
 // Optimized function to calculate stats using database aggregation
 async function calculateStudentStats(studentId) {
@@ -82,10 +83,14 @@ async function calculateStudentStats(studentId) {
 }
 
 export async function GET(request) {
+  const routeTimer = performanceLogger.startTimer('GET /api/student/enrollments')
+  const dbTimer = performanceLogger.startTimer('DB Queries')
+  
   try {
     const session = await getServerSession(authOptions)
 
     if (!session) {
+      routeTimer.stop()
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
     }
 
@@ -93,6 +98,7 @@ export async function GET(request) {
     const studentId = searchParams.get("studentId")
 
     if (studentId !== session.user.id && session.user.role !== "ADMIN") {
+      routeTimer.stop()
       return NextResponse.json({ message: "Forbidden" }, { status: 403 })
     }
 
@@ -156,12 +162,32 @@ export async function GET(request) {
       }
     })
 
+    const dbTime = dbTimer.stop()
+    const totalTime = routeTimer.stop()
+
+    // Log performance
+    performanceLogger.logAPIRoute('GET', '/api/student/enrollments', totalTime, {
+      status: 200,
+      dbTime,
+      studentId: session.user.id,
+    })
+
     return NextResponse.json({
       enrollments: enrollmentsWithProgress,
       stats,
     })
   } catch (error) {
+    const totalTime = routeTimer.stop()
+    const dbTime = dbTimer.duration || 0
+
     console.error("Error fetching enrollments:", error)
+    
+    performanceLogger.logAPIRoute('GET', '/api/student/enrollments', totalTime, {
+      status: 500,
+      dbTime,
+      error: error.message,
+    })
+
     return NextResponse.json({ message: "Internal server error" }, { status: 500 })
   }
 }
