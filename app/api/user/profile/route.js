@@ -2,16 +2,13 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import prisma from "@/lib/db"
+import { unstable_cache, revalidateTag } from "next/cache"
 
-export async function GET() {
-  try {
-    const session = await getServerSession(authOptions)
-    if (!session) {
-      return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
-    }
-
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
+// Cached function for user profile
+const getCachedUserProfile = unstable_cache(
+  async (userId) => {
+    return await prisma.user.findUnique({
+      where: { id: userId },
       select: {
         id: true,
         name: true,
@@ -30,6 +27,22 @@ export async function GET() {
         country: true,
       },
     })
+  },
+  ['user-profile'],
+  {
+    revalidate: 120, // Cache for 2 minutes
+    tags: ['user-profile'],
+  }
+)
+
+export async function GET() {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session) {
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
+    }
+
+    const user = await getCachedUserProfile(session.user.id)
 
     if (!user) {
       return NextResponse.json({ message: "User not found" }, { status: 404 })
@@ -82,6 +95,9 @@ export async function PATCH(request) {
         country: true,
       },
     })
+
+    // Invalidate cache
+    revalidateTag('user-profile')
 
     return NextResponse.json(updatedUser)
   } catch (error) {

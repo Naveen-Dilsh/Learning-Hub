@@ -1,12 +1,85 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo, useCallback, memo } from "react"
 import { useParams, useRouter } from 'next/navigation'
 import { useSession } from "next-auth/react"
 import Link from "next/link"
 import VideoPlayer from "@/components/video-player"
-import { PlayCircle, Users, Video, Clock, ChevronLeft, Lock, User } from "lucide-react"
+import { PlayCircle, Users, Video, Clock, ChevronLeft, Lock, User, CheckCircle } from "lucide-react"
 import LoadingBubbles from "@/components/loadingBubbles"
+
+// Memoized Video Item Component
+const VideoItem = memo(({ video, index, isSelected, onClick, isFree }) => (
+  <button
+    onClick={onClick}
+    className={`w-full text-left p-3 sm:p-4 rounded-lg transition-all ${
+      isSelected
+        ? "bg-primary/10 border border-primary"
+        : "hover:bg-muted border border-transparent"
+    }`}
+  >
+    <div className="flex items-center gap-3">
+      <div className={`flex-shrink-0 w-6 h-6 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-xs sm:text-sm font-semibold ${
+        isSelected ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+      }`}>
+        {index + 1}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className={`font-medium text-xs sm:text-sm mb-1 truncate ${
+          isSelected ? "text-primary" : "text-foreground"
+        }`}>
+          {video.title}
+        </div>
+        {video.duration && (
+          <div className={`text-xs flex items-center gap-1 ${
+            isSelected ? "text-primary" : "text-muted-foreground"
+          }`}>
+            <Clock className="w-3 h-3" />
+            {Math.floor(video.duration / 60)}:{String(video.duration % 60).padStart(2, "0")}
+          </div>
+        )}
+      </div>
+    </div>
+  </button>
+))
+
+VideoItem.displayName = 'VideoItem'
+
+// Memoized Course Lesson Item
+const CourseLessonItem = memo(({ video, index }) => (
+  <div className="flex items-center justify-between p-3 sm:p-4 rounded-lg hover:bg-muted transition border border-transparent hover:border-border">
+    <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
+      <div className="flex-shrink-0 w-7 h-7 sm:w-8 sm:h-8 bg-muted rounded-lg flex items-center justify-center font-semibold text-foreground text-xs sm:text-sm">
+        {index + 1}
+      </div>
+      <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
+        {video.isFree ? (
+          <PlayCircle className="w-4 h-4 sm:w-5 sm:h-5 text-chart-4 flex-shrink-0" />
+        ) : (
+          <Lock className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground flex-shrink-0" />
+        )}
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          <span className="font-medium text-foreground text-sm sm:text-base truncate">
+            {video.title}
+          </span>
+          {video.isFree && (
+            <span className="text-xs bg-chart-4/10 text-chart-4 px-2 py-0.5 rounded font-medium flex-shrink-0">
+              FREE
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+    {video.duration && (
+      <span className="text-xs sm:text-sm text-muted-foreground flex items-center gap-1 flex-shrink-0 ml-2">
+        <Clock className="w-3 h-3 sm:w-4 sm:h-4" />
+        {Math.floor(video.duration / 60)}:{String(video.duration % 60).padStart(2, "0")}
+      </span>
+    )}
+  </div>
+))
+
+CourseLessonItem.displayName = 'CourseLessonItem'
 
 export default function CourseDetailsPage() {
   const params = useParams()
@@ -16,20 +89,19 @@ export default function CourseDetailsPage() {
   const [isEnrolled, setIsEnrolled] = useState(false)
   const [loading, setLoading] = useState(true)
   const [selectedVideo, setSelectedVideo] = useState(null)
-  const [enrolling, setEnrolling] = useState(false)
 
-  useEffect(() => {
-    if (params.id) {
-      fetchCourse()
-      if (session?.user) {
-        checkEnrollment()
-      }
-    }
-  }, [params.id, session])
+  // Memoized free videos
+  const freeVideos = useMemo(() => 
+    course?.videos.filter(v => v.isFree) || [], 
+    [course]
+  )
 
-  const fetchCourse = async () => {
+  // Memoized fetch functions
+  const fetchCourse = useCallback(async () => {
     try {
-      const res = await fetch(`/api/courses/${params.id}`)
+      const res = await fetch(`/api/courses/${params.id}`, {
+        next: { revalidate: 60 }
+      })
       if (!res.ok) throw new Error("Failed to fetch course")
       const data = await res.json()
       setCourse(data)
@@ -43,9 +115,11 @@ export default function CourseDetailsPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [params.id])
 
-  const checkEnrollment = async () => {
+  const checkEnrollment = useCallback(async () => {
+    if (!session?.user) return
+    
     try {
       const res = await fetch(`/api/enrollments/check?courseId=${params.id}`)
       if (res.ok) {
@@ -55,86 +129,68 @@ export default function CourseDetailsPage() {
     } catch (error) {
       console.error("Error checking enrollment:", error)
     }
-  }
+  }, [params.id, session?.user])
 
-  const handleManualEnroll = async () => {
-    if (!session?.user) {
-      alert("Please sign in to enroll")
-      return
+  useEffect(() => {
+    if (params.id) {
+      fetchCourse()
     }
+  }, [params.id, fetchCourse])
 
-    setEnrolling(true)
-    try {
-      const res = await fetch('/api/enrollments', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          courseId: params.id
-        })
-      })
-
-      if (res.ok) {
-        setIsEnrolled(true)
-        alert("Successfully enrolled in the course!")
-      } else {
-        const error = await res.json()
-        alert(error.error || "Failed to enroll")
-      }
-    } catch (error) {
-      console.error("Error enrolling:", error)
-      alert("Failed to enroll. Please try again.")
-    } finally {
-      setEnrolling(false)
+  useEffect(() => {
+    if (session?.user && params.id) {
+      checkEnrollment()
     }
-  }
+  }, [session?.user, params.id, checkEnrollment])
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50">
-        <div className="text-gray-600 text-lg"><LoadingBubbles/></div>
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <LoadingBubbles/>
       </div>
     )
   }
 
   if (!course) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50">
-        <div className="text-gray-700 text-lg">Course not found</div>
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <div className="text-center">
+          <h2 className="text-xl sm:text-2xl font-bold text-foreground mb-2">Course not found</h2>
+          <Link href="/student/browse-course" className="btn-primary inline-block px-4 py-2 rounded-lg mt-4">
+            Back to Courses
+          </Link>
+        </div>
       </div>
     )
   }
 
-  const freeVideos = course.videos.filter(v => v.isFree)
-
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-background">
       {/* Clean Header */}
-      <header className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+      <header className="bg-card border-b border-border sticky top-0 z-10 backdrop-blur-sm bg-card/95">
+        <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-3 sm:py-4">
           <Link 
             href="/student/browse-course" 
-            className="inline-flex items-center gap-2 text-gray-600 hover:text-gray-900 font-medium transition mb-3"
+            className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground font-medium transition mb-2"
           >
-            <ChevronLeft className="w-5 h-5" />
-            Back to Courses
+            <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" />
+            <span className="text-sm sm:text-base">Back to Courses</span>
           </Link>
-          <h1 className="text-2xl font-bold text-gray-900 mt-2">
+          <h1 className="text-lg sm:text-2xl font-bold text-foreground line-clamp-1">
             {course.title}
           </h1>
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8">
         {/* Video Section */}
         {freeVideos.length > 0 && (
-          <div className="mb-8">
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          <div className="mb-6 sm:mb-8">
+            <div className="grid grid-cols-1 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
               {/* Video Player */}
-              <div className="lg:col-span-3">
+              <div className="lg:col-span-2 xl:col-span-3">
                 {selectedVideo && (
-                  <div className="bg-white rounded-lg overflow-hidden shadow-sm border border-gray-200">
+                  <div className="bg-card rounded-xl overflow-hidden shadow-sm border border-border">
                     <div className="aspect-video bg-black">
                       <VideoPlayer
                         videoId={selectedVideo.id}
@@ -143,12 +199,12 @@ export default function CourseDetailsPage() {
                         userId={session?.user?.id || "preview"}
                       />
                     </div>
-                    <div className="p-6">
-                      <h2 className="text-2xl font-semibold text-gray-900 mb-2">
+                    <div className="p-4 sm:p-6">
+                      <h2 className="text-xl sm:text-2xl font-semibold text-foreground mb-2">
                         {selectedVideo.title}
                       </h2>
                       {selectedVideo.description && (
-                        <p className="text-gray-600 leading-relaxed">
+                        <p className="text-sm sm:text-base text-muted-foreground leading-relaxed">
                           {selectedVideo.description}
                         </p>
                       )}
@@ -159,57 +215,42 @@ export default function CourseDetailsPage() {
 
               {/* Playlist Sidebar */}
               <div className="lg:col-span-1">
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 sticky top-8">
-                  <div className="p-4 border-b border-gray-200">
-                    <h3 className="font-semibold text-gray-900 text-sm">
+                <div className="bg-card rounded-xl shadow-sm border border-border lg:sticky lg:top-24">
+                  <div className="p-3 sm:p-4 border-b border-border">
+                    <h3 className="font-semibold text-foreground text-sm sm:text-base">
                       Preview Videos
                     </h3>
-                    <p className="text-gray-500 text-xs mt-1">
-                      {freeVideos.length} free videos
+                    <p className="text-muted-foreground text-xs sm:text-sm mt-1">
+                      {freeVideos.length} free {freeVideos.length === 1 ? 'video' : 'videos'}
                     </p>
                   </div>
                   
-                  <div className="p-2 max-h-96 overflow-y-auto">
+                  <div className="p-2 max-h-[300px] sm:max-h-96 overflow-y-auto custom-scrollbar">
                     <div className="space-y-1">
                       {freeVideos.map((video, index) => (
-                        <button
+                        <VideoItem
                           key={video.id}
+                          video={video}
+                          index={index}
+                          isSelected={selectedVideo?.id === video.id}
                           onClick={() => setSelectedVideo(video)}
-                          className={`w-full text-left p-3 rounded transition ${
-                            selectedVideo?.id === video.id
-                              ? "bg-blue-50 border border-blue-200"
-                              : "hover:bg-gray-50 border border-transparent"
-                          }`}
-                        >
-                          <div className={`font-medium text-sm mb-1 ${
-                            selectedVideo?.id === video.id ? "text-blue-900" : "text-gray-900"
-                          }`}>
-                            {index + 1}. {video.title}
-                          </div>
-                          {video.duration && (
-                            <div className={`text-xs flex items-center gap-1 ${
-                              selectedVideo?.id === video.id ? "text-blue-600" : "text-gray-500"
-                            }`}>
-                              <Clock className="w-3 h-3" />
-                              {Math.floor(video.duration / 60)}:{String(video.duration % 60).padStart(2, "0")}
-                            </div>
-                          )}
-                        </button>
+                          isFree={true}
+                        />
                       ))}
                     </div>
                   </div>
 
                   {!isEnrolled && (
-                    <div className="p-4 bg-gray-50 border-t border-gray-200">
-                      <p className="text-sm text-gray-900 font-medium mb-1">
+                    <div className="p-3 sm:p-4 bg-muted/50 border-t border-border">
+                      <p className="text-sm font-medium text-foreground mb-1">
                         Want full access?
                       </p>
-                      <p className="text-xs text-gray-600 mb-3">
+                      <p className="text-xs text-muted-foreground mb-3">
                         Enroll to access all {course.videos.length} videos
                       </p>
                       <Link
-                        href={`/courses/${course.id}/purchase`}
-                        className="block text-center px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition font-medium text-sm"
+                        href={`/student/browse-course/${course.id}/purchase`}
+                        className="btn-primary block text-center px-4 py-2 rounded-lg font-medium text-sm active:scale-[0.98]"
                       >
                         Enroll for Rs. {course.price}
                       </Link>
@@ -222,76 +263,74 @@ export default function CourseDetailsPage() {
         )}
 
         {/* Course Information */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-8">
-          <div className="p-8">
-            <h1 className="text-3xl font-bold text-gray-900 mb-3">
+        <div className="bg-card rounded-xl shadow-sm border border-border mb-6 sm:mb-8">
+          <div className="p-4 sm:p-6 lg:p-8">
+            <h2 className="text-2xl sm:text-3xl font-bold text-foreground mb-2 sm:mb-3">
               {course.title}
-            </h1>
-            <p className="text-lg text-gray-600 mb-6 leading-relaxed">
+            </h2>
+            <p className="text-sm sm:text-base lg:text-lg text-muted-foreground mb-6 leading-relaxed">
               {course.description}
             </p>
             
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8 pb-8 border-b border-gray-200">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mb-6 sm:mb-8 pb-6 sm:pb-8 border-b border-border">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-gray-100 rounded">
-                  <User className="w-5 h-5 text-gray-600" />
+                <div className="p-2 sm:p-2.5 bg-muted rounded-lg">
+                  <User className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground" />
                 </div>
                 <div>
-                  <p className="text-xs text-gray-500 font-medium">Instructor</p>
-                  <p className="text-sm font-semibold text-gray-900">
+                  <p className="text-xs text-muted-foreground font-medium">Instructor</p>
+                  <p className="text-sm sm:text-base font-semibold text-foreground truncate">
                     {course.instructor.name}
                   </p>
                 </div>
               </div>
               
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-gray-100 rounded">
-                  <Video className="w-5 h-5 text-gray-600" />
+                <div className="p-2 sm:p-2.5 bg-muted rounded-lg">
+                  <Video className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground" />
                 </div>
                 <div>
-                  <p className="text-xs text-gray-500 font-medium">Videos</p>
-                  <p className="text-sm font-semibold text-gray-900">
+                  <p className="text-xs text-muted-foreground font-medium">Videos</p>
+                  <p className="text-sm sm:text-base font-semibold text-foreground">
                     {course.videos.length} lessons
                   </p>
                 </div>
               </div>
               
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-gray-100 rounded">
-                  <Users className="w-5 h-5 text-gray-600" />
+                <div className="p-2 sm:p-2.5 bg-muted rounded-lg">
+                  <Users className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground" />
                 </div>
                 <div>
-                  <p className="text-xs text-gray-500 font-medium">Students</p>
-                  <p className="text-sm font-semibold text-gray-900">
+                  <p className="text-xs text-muted-foreground font-medium">Students</p>
+                  <p className="text-sm sm:text-base font-semibold text-foreground">
                     {course._count.enrollments} enrolled
                   </p>
                 </div>
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <div className="text-3xl font-bold text-gray-900">
-                Rs. {course.price}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="text-2xl sm:text-3xl font-bold text-primary">
+                Rs. {course.price.toLocaleString()}
               </div>
-              <div className="flex flex-wrap gap-3">
+              <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full sm:w-auto">
                 {isEnrolled ? (
                   <Link
                     href={`/courses/${course.id}/watch`}
-                    className="inline-flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded hover:bg-green-700 transition font-medium"
+                    className="btn-success inline-flex items-center justify-center gap-2 px-4 sm:px-6 py-2.5 sm:py-3 rounded-lg font-medium text-sm sm:text-base active:scale-[0.98]"
                   >
-                    <PlayCircle className="w-5 h-5" />
-                    Continue Learning
+                    <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5" />
+                    <span>Continue Learning</span>
                   </Link>
                 ) : (
-                  <>
-                    <Link
-                      href={`/student/browse-course/${course.id}/purchase`}
-                      className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded hover:bg-blue-700 transition font-medium"
-                    >
-                      Enroll Now
-                    </Link>
-                    
-                  </>
+                  <Link
+                    href={`/student/browse-course/${course.id}/purchase`}
+                    className="btn-primary inline-flex items-center justify-center gap-2 px-4 sm:px-6 py-2.5 sm:py-3 rounded-lg font-medium text-sm sm:text-base active:scale-[0.98]"
+                  >
+                    <PlayCircle className="w-4 h-4 sm:w-5 sm:h-5" />
+                    <span>Enroll Now</span>
+                  </Link>
                 )}
               </div>
             </div>
@@ -299,52 +338,24 @@ export default function CourseDetailsPage() {
         </div>
 
         {/* Course Content */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-          <div className="p-6 border-b border-gray-200">
-            <h2 className="text-xl font-bold text-gray-900">
+        <div className="bg-card rounded-xl shadow-sm border border-border">
+          <div className="p-4 sm:p-6 border-b border-border">
+            <h2 className="text-lg sm:text-xl font-bold text-foreground">
               Course Content
             </h2>
-            <p className="text-sm text-gray-500 mt-1">
-              {course.videos.length} video lessons
+            <p className="text-xs sm:text-sm text-muted-foreground mt-1">
+              {course.videos.length} video {course.videos.length === 1 ? 'lesson' : 'lessons'}
             </p>
           </div>
           
-          <div className="p-6">
-            <div className="space-y-2">
+          <div className="p-3 sm:p-6">
+            <div className="space-y-1 sm:space-y-2">
               {course.videos.map((video, index) => (
-                <div 
-                  key={video.id} 
-                  className="flex items-center justify-between p-4 rounded hover:bg-gray-50 transition border border-transparent hover:border-gray-200"
-                >
-                  <div className="flex items-center gap-4 flex-1">
-                    <div className="flex-shrink-0 w-8 h-8 bg-gray-100 rounded flex items-center justify-center font-semibold text-gray-700 text-sm">
-                      {index + 1}
-                    </div>
-                    <div className="flex items-center gap-3 flex-1">
-                      {video.isFree ? (
-                        <PlayCircle className="w-5 h-5 text-green-600" />
-                      ) : (
-                        <Lock className="w-5 h-5 text-gray-400" />
-                      )}
-                      <div className="flex items-center gap-2 flex-1">
-                        <span className="font-medium text-gray-900">
-                          {video.title}
-                        </span>
-                        {video.isFree && (
-                          <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded font-medium">
-                            FREE
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                  {video.duration && (
-                    <span className="text-sm text-gray-500 flex items-center gap-1">
-                      <Clock className="w-4 h-4" />
-                      {Math.floor(video.duration / 60)}:{String(video.duration % 60).padStart(2, "0")}
-                    </span>
-                  )}
-                </div>
+                <CourseLessonItem
+                  key={video.id}
+                  video={video}
+                  index={index}
+                />
               ))}
             </div>
           </div>
