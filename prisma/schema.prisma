@@ -6,8 +6,11 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("NEON_DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("NEON_DATABASE_URL")
+  // directUrl is optional - only needed for migrations on Neon
+  // If you have NEON_DIRECT_URL, uncomment the line below:
+  // directUrl = env("NEON_DIRECT_URL")
 }
 
 model User {
@@ -73,6 +76,8 @@ model Course {
 
   @@index([instructorId])
   @@index([published])
+  @@index([createdAt(sort: Desc)]) // For sorting courses by creation date
+  @@index([published, createdAt(sort: Desc)]) // Composite for published courses sorted by date
 }
 
 model Video {
@@ -125,6 +130,9 @@ model Enrollment {
   @@index([studentId])
   @@index([courseId])
   @@index([status])
+  @@index([studentId, status]) // Composite index for common query pattern
+  @@index([enrolledAt(sort: Desc)]) // For sorting by enrollment date
+  @@index([studentId, status, enrolledAt(sort: Desc)]) // Composite for filtered + sorted queries
 }
 
 model VideoProgress {
@@ -143,6 +151,7 @@ model VideoProgress {
   @@index([videoId])
   @@index([enrollmentId, completed]) // Composite index for better stats queries
   @@index([completed]) // Index for filtering completed videos
+  @@index([enrollmentId, completed, videoId]) // Composite for complex queries
 }
 
 model Payment {
@@ -169,6 +178,8 @@ model Payment {
   @@index([studentId])
   @@index([courseId])
   @@index([status])
+  @@index([createdAt(sort: Desc)]) // For sorting payments by date
+  @@index([studentId, createdAt(sort: Desc)]) // Composite for student payments sorted by date
 }
 
 model Review {
@@ -273,6 +284,7 @@ model Certificate {
   @@unique([studentId, courseId])
   @@index([studentId])
   @@index([courseId])
+  @@index([studentId, courseId]) // Composite for faster lookups
 }
 
 model LiveSession {
@@ -365,6 +377,9 @@ model Delivery {
   deliveredAt   DateTime?
 
   @@index([status])
+  @@index([enrollmentId, status]) // Composite for enrollment-based queries
+  @@index([createdAt(sort: Desc)]) // For sorting deliveries by date
+  @@index([status, createdAt(sort: Desc)]) // Composite for filtered + sorted queries
 }
 
 enum Role {

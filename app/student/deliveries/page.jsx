@@ -1,29 +1,44 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback, useMemo } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
+import { useToast } from "@/hooks/use-toast"
 import Link from "next/link"
-import { Package, Truck, CheckCircle, Clock, MapPin } from "lucide-react"
+import LoadingBubbles from "@/components/loadingBubbles"
+import { Package, Truck, CheckCircle, Clock, MapPin, ArrowLeft } from "lucide-react"
 
 const STATUS_CONFIG = {
   PENDING: {
     label: "Pending",
     icon: Clock,
-    color: "text-yellow-500",
+    className: "text-chart-5",
+    bgClassName: "bg-chart-5/10",
+    borderClassName: "border-chart-5/20",
     message: "Your order is waiting to be processed",
   },
   PROCESSING: {
     label: "Processing",
     icon: Package,
-    color: "text-blue-500",
+    className: "text-primary",
+    bgClassName: "bg-primary/10",
+    borderClassName: "border-primary/20",
     message: "Your materials are being prepared",
   },
-  SHIPPED: { label: "Shipped", icon: Truck, color: "text-purple-500", message: "Your package is on its way!" },
+  SHIPPED: {
+    label: "Shipped",
+    icon: Truck,
+    className: "text-secondary",
+    bgClassName: "bg-secondary/10",
+    borderClassName: "border-secondary/20",
+    message: "Your package is on its way!",
+  },
   DELIVERED: {
     label: "Delivered",
     icon: CheckCircle,
-    color: "text-green-500",
+    className: "text-success",
+    bgClassName: "bg-success/10",
+    borderClassName: "border-success/20",
     message: "Your package has been delivered",
   },
 }
@@ -31,6 +46,7 @@ const STATUS_CONFIG = {
 export default function StudentDeliveries() {
   const { data: session, status: authStatus } = useSession()
   const router = useRouter()
+  const { toast } = useToast()
   const [deliveries, setDeliveries] = useState([])
   const [loading, setLoading] = useState(true)
 
@@ -40,131 +56,231 @@ export default function StudentDeliveries() {
     }
   }, [authStatus, router])
 
+  const fetchDeliveries = useCallback(async () => {
+    if (!session?.user?.id) return
+
+    try {
+      const res = await fetch("/api/student/deliveries", {
+        next: { revalidate: 60 }
+      })
+      
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}))
+        throw new Error(errorData.message || "Failed to fetch deliveries")
+      }
+
+      const data = await res.json()
+      setDeliveries(Array.isArray(data) ? data : [])
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Error Loading Deliveries",
+        description: error.message || "Failed to load deliveries. Please try again.",
+      })
+    } finally {
+      setLoading(false)
+    }
+  }, [session?.user?.id, toast])
+
   useEffect(() => {
     if (session) {
       fetchDeliveries()
     }
-  }, [session])
+  }, [session, fetchDeliveries])
 
-  const fetchDeliveries = async () => {
-    try {
-      const res = await fetch("/api/student/deliveries")
-      if (!res.ok) throw new Error("Failed to fetch")
-      const data = await res.json()
-      setDeliveries(data)
-    } catch (error) {
-      console.error("Error fetching deliveries:", error)
-    } finally {
-      setLoading(false)
-    }
-  }
+  // Memoized status counts
+  const statusCounts = useMemo(() => {
+    return deliveries.reduce((acc, delivery) => {
+      acc[delivery.status] = (acc[delivery.status] || 0) + 1
+      return acc
+    }, {})
+  }, [deliveries])
 
   if (loading) {
-    return <div className="flex items-center justify-center min-h-screen">Loading...</div>
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <LoadingBubbles />
+      </div>
+    )
   }
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="max-w-4xl mx-auto px-4 py-8">
-        <div className="mb-8">
-          <Link href="/student/dashboard" className="text-primary hover:underline mb-4 inline-block">
-            ← Back to Dashboard
+      {/* Header */}
+      <div className="bg-card/95 backdrop-blur-sm border-b border-border sticky top-0 z-10">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
+          <Link 
+            href="/student"
+            className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground mb-2 sm:mb-3 font-medium transition-colors text-sm sm:text-base"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Back to Dashboard
           </Link>
-          <h1 className="text-3xl font-bold text-foreground">My Deliveries</h1>
-          <p className="text-muted-foreground mt-1">Track your course material deliveries</p>
+          <h1 className="text-2xl sm:text-3xl font-bold text-foreground">My Deliveries</h1>
+          <p className="text-sm sm:text-base text-muted-foreground mt-1">Track your course material deliveries</p>
         </div>
+      </div>
 
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+        {/* Stats Cards */}
+        {deliveries.length > 0 && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mb-6 sm:mb-8">
+            {Object.entries(STATUS_CONFIG).map(([status, config]) => {
+              const count = statusCounts[status] || 0
+              const Icon = config.icon
+              
+              return (
+                <div key={status} className="bg-card rounded-xl border border-border p-3 sm:p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className={`p-2 ${config.bgClassName} rounded-lg`}>
+                      <Icon className={`w-4 h-4 sm:w-5 sm:h-5 ${config.className}`} />
+                    </div>
+                    <span className="text-xl sm:text-2xl font-bold text-foreground">{count}</span>
+                  </div>
+                  <p className="text-xs sm:text-sm text-muted-foreground">{config.label}</p>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {/* Deliveries List */}
         {deliveries.length === 0 ? (
-          <div className="text-center py-12 bg-card rounded-lg border border-border">
-            <Package className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-            <p className="text-muted-foreground">No deliveries found</p>
+          <div className="text-center py-12 sm:py-16 bg-card rounded-xl border border-border">
+            <Package className="w-12 h-12 sm:w-16 sm:h-16 text-muted-foreground/50 mx-auto mb-4" />
+            <p className="text-base sm:text-lg font-semibold text-foreground mb-2">No deliveries found</p>
+            <p className="text-sm sm:text-base text-muted-foreground">
+              Your course material deliveries will appear here
+            </p>
           </div>
         ) : (
-          <div className="space-y-6">
+          <div className="space-y-4 sm:space-y-6">
             {deliveries.map((delivery) => {
               const statusConfig = STATUS_CONFIG[delivery.status] || STATUS_CONFIG.PENDING
               const StatusIcon = statusConfig.icon
+              const progressSteps = ["PENDING", "PROCESSING", "SHIPPED", "DELIVERED"]
+              const currentStepIndex = progressSteps.indexOf(delivery.status)
 
               return (
-                <div key={delivery.id} className="bg-card rounded-lg border border-border p-6">
-                  <div className="flex items-start gap-4 mb-4">
-                    <div className={`p-3 rounded-full bg-muted ${statusConfig.color}`}>
-                      <StatusIcon className="w-6 h-6" />
+                <div key={delivery.id} className="bg-card rounded-xl border border-border p-4 sm:p-6">
+                  {/* Header */}
+                  <div className="flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-4 mb-4 sm:mb-6">
+                    <div className={`p-2 sm:p-3 rounded-full ${statusConfig.bgClassName} flex-shrink-0`}>
+                      <StatusIcon className={`w-5 h-5 sm:w-6 sm:h-6 ${statusConfig.className}`} />
                     </div>
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-foreground">{delivery.enrollment?.course?.title}</h3>
-                      <p className={`text-sm ${statusConfig.color}`}>{statusConfig.message}</p>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-semibold text-base sm:text-lg text-foreground mb-1 line-clamp-2">
+                        {delivery.enrollment?.course?.title || "Course Materials"}
+                      </h3>
+                      <p className={`text-xs sm:text-sm ${statusConfig.className}`}>{statusConfig.message}</p>
                     </div>
-                    <div className={`px-3 py-1 rounded-full text-sm ${statusConfig.color} bg-muted`}>
+                    <div className={`px-3 py-1.5 rounded-full text-xs sm:text-sm font-semibold ${statusConfig.className} ${statusConfig.bgClassName} border ${statusConfig.borderClassName} flex-shrink-0`}>
                       {statusConfig.label}
                     </div>
                   </div>
 
                   {/* Progress bar */}
-                  <div className="mb-4">
-                    <div className="flex justify-between mb-2">
-                      {["PENDING", "PROCESSING", "SHIPPED", "DELIVERED"].map((step, index) => {
-                        const stepIndex = ["PENDING", "PROCESSING", "SHIPPED", "DELIVERED"].indexOf(delivery.status)
-                        const isCompleted = index <= stepIndex
+                  <div className="mb-4 sm:mb-6">
+                    <div className="flex justify-between mb-2 sm:mb-3">
+                      {progressSteps.map((step, index) => {
+                        const isCompleted = index <= currentStepIndex
                         const StepIcon = STATUS_CONFIG[step].icon
+                        const stepConfig = STATUS_CONFIG[step]
 
                         return (
-                          <div key={step} className="flex flex-col items-center">
+                          <div key={step} className="flex flex-col items-center flex-1">
                             <div
-                              className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                                isCompleted ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+                              className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center transition-all ${
+                                isCompleted 
+                                  ? `bg-primary text-primary-foreground ${stepConfig.bgClassName}` 
+                                  : "bg-muted text-muted-foreground"
                               }`}
                             >
-                              <StepIcon className="w-4 h-4" />
+                              <StepIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                             </div>
-                            <span className="text-xs mt-1 text-muted-foreground">{STATUS_CONFIG[step].label}</span>
+                            <span className="text-[10px] sm:text-xs mt-1 sm:mt-2 text-muted-foreground text-center">
+                              {stepConfig.label}
+                            </span>
                           </div>
                         )
                       })}
                     </div>
-                    <div className="h-1 bg-muted rounded-full overflow-hidden">
+                    <div className="h-1.5 sm:h-2 bg-muted rounded-full overflow-hidden">
                       <div
-                        className="h-full bg-primary transition-all"
+                        className={`h-full bg-primary transition-all duration-500`}
                         style={{
-                          width: `${(["PENDING", "PROCESSING", "SHIPPED", "DELIVERED"].indexOf(delivery.status) + 1) * 25}%`,
+                          width: `${(currentStepIndex + 1) * 25}%`,
                         }}
                       />
                     </div>
                   </div>
 
                   {/* Delivery details */}
-                  <div className="bg-muted/50 rounded-lg p-4">
-                    <div className="flex items-start gap-2 mb-2">
-                      <MapPin className="w-4 h-4 text-muted-foreground mt-0.5" />
-                      <div className="text-sm">
-                        <p className="text-foreground">{delivery.fullName}</p>
+                  <div className={`${statusConfig.bgClassName} rounded-lg p-3 sm:p-4 border ${statusConfig.borderClassName}`}>
+                    <div className="flex items-start gap-2 sm:gap-3 mb-2 sm:mb-3">
+                      <MapPin className={`w-4 h-4 sm:w-5 sm:h-5 ${statusConfig.className} mt-0.5 flex-shrink-0`} />
+                      <div className="text-xs sm:text-sm flex-1 min-w-0">
+                        <p className="font-semibold text-foreground mb-1">{delivery.fullName}</p>
                         <p className="text-muted-foreground">{delivery.addressLine1}</p>
-                        {delivery.addressLine2 && <p className="text-muted-foreground">{delivery.addressLine2}</p>}
+                        {delivery.addressLine2 && (
+                          <p className="text-muted-foreground">{delivery.addressLine2}</p>
+                        )}
                         <p className="text-muted-foreground">
-                          {delivery.city}, {delivery.district} {delivery.postalCode}
+                          {delivery.city}, {delivery.district}
+                          {delivery.postalCode && ` ${delivery.postalCode}`}
                         </p>
+                        {delivery.phone && (
+                          <p className="text-muted-foreground mt-1">Phone: {delivery.phone}</p>
+                        )}
                       </div>
                     </div>
 
                     {delivery.trackingNumber && (
                       <div className="mt-3 pt-3 border-t border-border">
-                        <p className="text-sm">
+                        <p className="text-xs sm:text-sm mb-1">
                           <span className="text-muted-foreground">Tracking Number:</span>{" "}
-                          <span className="font-mono text-foreground">{delivery.trackingNumber}</span>
+                          <span className="font-mono text-foreground font-semibold break-all">
+                            {delivery.trackingNumber}
+                          </span>
                         </p>
                         {delivery.courier && (
-                          <p className="text-sm text-muted-foreground">Courier: {delivery.courier}</p>
+                          <p className="text-xs sm:text-sm text-muted-foreground">
+                            Courier: <span className="font-medium text-foreground">{delivery.courier}</span>
+                          </p>
                         )}
                       </div>
                     )}
                   </div>
 
                   {/* Timestamps */}
-                  <div className="mt-4 flex flex-wrap gap-4 text-xs text-muted-foreground">
-                    <span>Requested: {new Date(delivery.createdAt).toLocaleDateString()}</span>
-                    {delivery.shippedAt && <span>Shipped: {new Date(delivery.shippedAt).toLocaleDateString()}</span>}
+                  <div className="mt-4 flex flex-wrap gap-3 sm:gap-4 text-xs text-muted-foreground">
+                    <span>
+                      <span className="font-medium">Requested:</span>{" "}
+                      {new Date(delivery.createdAt).toLocaleDateString("en-US", {
+                        year: "numeric",
+                        month: "short",
+                        day: "numeric",
+                      })}
+                    </span>
+                    {delivery.shippedAt && (
+                      <span>
+                        <span className="font-medium">Shipped:</span>{" "}
+                        {new Date(delivery.shippedAt).toLocaleDateString("en-US", {
+                          year: "numeric",
+                          month: "short",
+                          day: "numeric",
+                        })}
+                      </span>
+                    )}
                     {delivery.deliveredAt && (
-                      <span>Delivered: {new Date(delivery.deliveredAt).toLocaleDateString()}</span>
+                      <span>
+                        <span className="font-medium">Delivered:</span>{" "}
+                        {new Date(delivery.deliveredAt).toLocaleDateString("en-US", {
+                          year: "numeric",
+                          month: "short",
+                          day: "numeric",
+                        })}
+                      </span>
                     )}
                   </div>
                 </div>

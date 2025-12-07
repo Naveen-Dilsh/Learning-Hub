@@ -1,39 +1,31 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
-import prisma from "@/lib/db"
-import { unstable_cache, revalidateTag } from "next/cache"
+import { prisma } from "@/lib/db"
+import { unstable_cache, revalidatePath } from "next/cache"
 
-// Cached function for user profile
-const getCachedUserProfile = unstable_cache(
-  async (userId) => {
-    return await prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        image: true,
-        studentNumber: true,
-        credits: true,
-        role: true,
-        createdAt: true,
-        phone: true,
-        addressLine1: true,
-        addressLine2: true,
-        city: true,
-        district: true,
-        postalCode: true,
-        country: true,
-      },
-    })
-  },
-  ['user-profile'],
-  {
-    revalidate: 120, // Cache for 2 minutes
-    tags: ['user-profile'],
-  }
-)
+async function getUserProfile(userId) {
+  return await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      image: true,
+      studentNumber: true,
+      credits: true,
+      role: true,
+      createdAt: true,
+      phone: true,
+      addressLine1: true,
+      addressLine2: true,
+      city: true,
+      district: true,
+      postalCode: true,
+      country: true,
+    },
+  })
+}
 
 export async function GET() {
   try {
@@ -42,7 +34,17 @@ export async function GET() {
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
     }
 
-    const user = await getCachedUserProfile(session.user.id)
+    // Cache user profile for 120 seconds
+    const cachedGetUserProfile = unstable_cache(
+      getUserProfile,
+      [`user-profile-${session.user.id}`],
+      {
+        revalidate: 120,
+        tags: [`user-profile-${session.user.id}`],
+      }
+    )
+
+    const user = await cachedGetUserProfile(session.user.id)
 
     if (!user) {
       return NextResponse.json({ message: "User not found" }, { status: 404 })
@@ -51,7 +53,20 @@ export async function GET() {
     return NextResponse.json(user)
   } catch (error) {
     console.error("[Profile] Error fetching user:", error)
-    return NextResponse.json({ message: "Internal server error" }, { status: 500 })
+    
+    let errorMessage = "Failed to fetch profile"
+    let statusCode = 500
+    
+    if (error.message) {
+      errorMessage = error.message
+    } else if (error.name === "PrismaClientKnownRequestError") {
+      errorMessage = "Database error occurred. Please try again."
+    }
+    
+    return NextResponse.json({ 
+      message: errorMessage,
+      error: error.message || "An unexpected error occurred"
+    }, { status: statusCode })
   }
 }
 
@@ -97,11 +112,39 @@ export async function PATCH(request) {
     })
 
     // Invalidate cache
-    revalidateTag('user-profile')
+    revalidatePath("/api/user/profile")
 
     return NextResponse.json(updatedUser)
   } catch (error) {
     console.error("[Profile] Error updating user:", error)
-    return NextResponse.json({ message: "Internal server error" }, { status: 500 })
+    
+    // Handle Prisma errors
+    if (error.code === "P2002") {
+      const field = Array.isArray(error.meta?.target) ? error.meta.target[0] : error.meta?.target || "field"
+      const model = error.meta?.model || "Model"
+      
+      return NextResponse.json({ 
+        message: `Invalid Prisma.${model.toLowerCase()}.update() invocation:\n\nUnique constraint failed on the fields: (${field})`,
+        error: error.message,
+        code: "UNIQUE_CONSTRAINT_VIOLATION",
+        field: field,
+        model: model,
+        prismaCode: error.code
+      }, { status: 400 })
+    }
+    
+    let errorMessage = "Failed to update profile"
+    let statusCode = 500
+    
+    if (error.message) {
+      errorMessage = error.message
+    } else if (error.name === "PrismaClientKnownRequestError") {
+      errorMessage = "Database error occurred. Please try again."
+    }
+    
+    return NextResponse.json({ 
+      message: errorMessage,
+      error: error.message || "An unexpected error occurred"
+    }, { status: statusCode })
   }
 }
