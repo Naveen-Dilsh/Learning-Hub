@@ -4,7 +4,7 @@ import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { Plus, Edit, Video, Users, DollarSign, BookOpen, Search, Filter } from "lucide-react"
+import { Plus, Edit, Video, Users, DollarSign, BookOpen, Search, Filter, Calendar } from "lucide-react"
 
 export default function InstructorCourses() {
   const { data: session, status } = useSession()
@@ -202,7 +202,7 @@ export default function InstructorCourses() {
                     </div>
 
                     {/* Action Buttons */}
-                    <div className="flex gap-2">
+                    <div className="flex flex-col sm:flex-row gap-2">
                       <Link
                         href={`/instructor/courses/${course.id}/edit`}
                         className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 transition-all"
@@ -216,6 +216,13 @@ export default function InstructorCourses() {
                       >
                         <Video className="w-4 h-4" />
                         Videos
+                      </Link>
+                      <Link
+                        href={`/instructor/courses/${course.id}/live-sessions`}
+                        className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 border-2 border-border text-foreground rounded-lg text-sm font-medium hover:bg-muted transition-all"
+                      >
+                        <Calendar className="w-4 h-4" />
+                        Live
                       </Link>
                     </div>
                   </div>

@@ -1,23 +1,31 @@
 import { prisma } from "@/lib/db"
+import { performanceLogger } from "@/lib/performance-logger"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { NextResponse } from "next/server"
+import { revalidateTag } from "next/cache"
 
 // Update delivery status
 export async function PATCH(request, { params }) {
+  const routeTimer = performanceLogger.startTimer("PATCH /api/instructor/deliveries/[id]")
+  const dbTimer = performanceLogger.startTimer("DB Queries")
+
   try {
     const session = await getServerSession(authOptions)
 
     if (!session) {
+      routeTimer.stop()
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
     }
 
     if (session.user.role !== "INSTRUCTOR" && session.user.role !== "ADMIN") {
+      routeTimer.stop()
       return NextResponse.json({ message: "Forbidden" }, { status: 403 })
     }
 
-    const { id } = params
-    const { status, trackingNumber, courier, notes } = await request.json()
+    const { id } = await params
+    const body = await request.json()
+    const { status, trackingNumber, courier, notes } = body
 
     // Check if delivery exists and belongs to instructor's course
     const delivery = await prisma.delivery.findFirst({
@@ -29,17 +37,26 @@ export async function PATCH(request, { params }) {
           },
         },
       },
-      include: {
+      select: {
+        id: true,
+        status: true,
+        shippedAt: true,
+        deliveredAt: true,
         enrollment: {
-          include: {
-            student: true,
-            course: true,
+          select: {
+            studentId: true,
+            course: {
+              select: {
+                title: true,
+              },
+            },
           },
         },
       },
     })
 
     if (!delivery) {
+      routeTimer.stop()
       return NextResponse.json({ message: "Delivery not found" }, { status: 404 })
     }
 
@@ -61,84 +78,125 @@ export async function PATCH(request, { params }) {
     if (courier !== undefined) updateData.courier = courier
     if (notes !== undefined) updateData.notes = notes
 
-    const updatedDelivery = await prisma.delivery.update({
-      where: { id },
-      data: updateData,
-      include: {
-        enrollment: {
-          include: {
-            student: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-                studentNumber: true,
+    // Update delivery and create notification in parallel
+    const [updatedDelivery] = await Promise.all([
+      prisma.delivery.update({
+        where: { id },
+        data: updateData,
+        select: {
+          id: true,
+          status: true,
+          trackingNumber: true,
+          courier: true,
+          notes: true,
+          shippedAt: true,
+          deliveredAt: true,
+          enrollment: {
+            select: {
+              student: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                  studentNumber: true,
+                },
               },
-            },
-            course: {
-              select: {
-                id: true,
-                title: true,
+              course: {
+                select: {
+                  id: true,
+                  title: true,
+                },
               },
             },
           },
         },
-      },
+      }),
+      // Create notification for student if status changed
+      status && status !== delivery.status
+        ? (async () => {
+            let notificationMessage = ""
+
+            switch (status) {
+              case "PROCESSING":
+                notificationMessage = `Your course materials for "${delivery.enrollment.course.title}" are being prepared for shipping.`
+                break
+              case "SHIPPED":
+                notificationMessage = `Your course materials for "${delivery.enrollment.course.title}" have been shipped!${
+                  trackingNumber ? ` Tracking: ${trackingNumber}` : ""
+                }`
+                break
+              case "DELIVERED":
+                notificationMessage = `Your course materials for "${delivery.enrollment.course.title}" have been marked as delivered.`
+                break
+            }
+
+            if (notificationMessage) {
+              await prisma.notification.create({
+                data: {
+                  studentId: delivery.enrollment.studentId,
+                  title: `Delivery ${status.charAt(0) + status.slice(1).toLowerCase()}`,
+                  message: notificationMessage,
+                  type: "info",
+                },
+              })
+            }
+          })()
+        : Promise.resolve(null),
+    ])
+
+    // Invalidate cache
+    revalidateTag(`instructor-deliveries-${session.user.id}`)
+
+    const dbTime = dbTimer.stop()
+    const totalTime = routeTimer.stop()
+
+    // Log performance
+    performanceLogger.logAPIRoute("PATCH", "/api/instructor/deliveries/[id]", totalTime, {
+      status: 200,
+      dbTime,
+      deliveryId: id,
+      instructorId: session.user.id,
     })
-
-    // Create notification for student if status changed
-    if (status && status !== delivery.status) {
-      let notificationMessage = ""
-
-      switch (status) {
-        case "PROCESSING":
-          notificationMessage = `Your course materials for "${delivery.enrollment.course.title}" are being prepared for shipping.`
-          break
-        case "SHIPPED":
-          notificationMessage = `Your course materials for "${delivery.enrollment.course.title}" have been shipped!${trackingNumber ? ` Tracking: ${trackingNumber}` : ""}`
-          break
-        case "DELIVERED":
-          notificationMessage = `Your course materials for "${delivery.enrollment.course.title}" have been marked as delivered.`
-          break
-      }
-
-      if (notificationMessage) {
-        await prisma.notification.create({
-          data: {
-            studentId: delivery.enrollment.studentId,
-            title: `Delivery ${status.charAt(0) + status.slice(1).toLowerCase()}`,
-            message: notificationMessage,
-            type: "info",
-          },
-        })
-      }
-    }
 
     return NextResponse.json(updatedDelivery)
   } catch (error) {
+    const totalTime = routeTimer.stop()
+    const dbTime = dbTimer.duration || 0
+
     console.error("Error updating delivery:", error)
-    console.error("Error name:", error.name)
-    console.error("Error message:", error.message)
-    console.error("Error stack:", error.stack)
-    console.error("Error updating delivery:", error)
-    return NextResponse.json({ message: "Internal server error" }, { status: 500 })
+
+    performanceLogger.logAPIRoute("PATCH", "/api/instructor/deliveries/[id]", totalTime, {
+      status: 500,
+      dbTime,
+      error: error.message,
+    })
+
+    return NextResponse.json(
+      { message: error.message || "Internal server error" },
+      { status: 500 }
+    )
   }
 }
 
 // Delete delivery
 export async function DELETE(request, { params }) {
+  const routeTimer = performanceLogger.startTimer("DELETE /api/instructor/deliveries/[id]")
+  const dbTimer = performanceLogger.startTimer("DB Queries")
+
   try {
     const session = await getServerSession(authOptions)
 
     if (!session) {
+      routeTimer.stop()
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
     }
 
     if (session.user.role !== "INSTRUCTOR" && session.user.role !== "ADMIN") {
+      routeTimer.stop()
       return NextResponse.json({ message: "Forbidden" }, { status: 403 })
     }
 
-    const { id } = params
+    const { id } = await params
 
     // Check if delivery exists and belongs to instructor's course
     const delivery = await prisma.delivery.findFirst({
@@ -150,26 +208,58 @@ export async function DELETE(request, { params }) {
           },
         },
       },
+      select: {
+        id: true,
+        enrollmentId: true,
+      },
     })
 
     if (!delivery) {
+      routeTimer.stop()
       return NextResponse.json({ message: "Delivery not found" }, { status: 404 })
     }
 
-    // Update enrollment to not require delivery
-    await prisma.enrollment.update({
-      where: { id: delivery.enrollmentId },
-      data: { requiresDelivery: false },
-    })
+    // Update enrollment and delete delivery in parallel
+    await Promise.all([
+      prisma.enrollment.update({
+        where: { id: delivery.enrollmentId },
+        data: { requiresDelivery: false },
+      }),
+      prisma.delivery.delete({
+        where: { id },
+      }),
+    ])
 
-    // Delete delivery
-    await prisma.delivery.delete({
-      where: { id },
+    // Invalidate cache
+    revalidateTag(`instructor-deliveries-${session.user.id}`)
+
+    const dbTime = dbTimer.stop()
+    const totalTime = routeTimer.stop()
+
+    // Log performance
+    performanceLogger.logAPIRoute("DELETE", "/api/instructor/deliveries/[id]", totalTime, {
+      status: 200,
+      dbTime,
+      deliveryId: id,
+      instructorId: session.user.id,
     })
 
     return NextResponse.json({ message: "Delivery deleted successfully" })
   } catch (error) {
+    const totalTime = routeTimer.stop()
+    const dbTime = dbTimer.duration || 0
+
     console.error("Error deleting delivery:", error)
-    return NextResponse.json({ message: "Internal server error" }, { status: 500 })
+
+    performanceLogger.logAPIRoute("DELETE", "/api/instructor/deliveries/[id]", totalTime, {
+      status: 500,
+      dbTime,
+      error: error.message,
+    })
+
+    return NextResponse.json(
+      { message: error.message || "Internal server error" },
+      { status: 500 }
+    )
   }
 }

@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useMemo } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter, useParams, useSearchParams } from "next/navigation"
+import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useToast } from "@/hooks/use-toast"
 import Link from "next/link"
 import ImageUpload from "@/components/image-upload"
@@ -15,9 +16,9 @@ export default function ManualEnrollment() {
   const params = useParams()
   const searchParams = useSearchParams()
   const { toast } = useToast()
+  const queryClient = useQueryClient()
   const [course, setCourse] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [submitting, setSubmitting] = useState(false)
   const [receiptImage, setReceiptImage] = useState("")
 
   // Get requiresDelivery from URL params (set on purchase page)
@@ -28,10 +29,69 @@ export default function ManualEnrollment() {
   const [userProfile, setUserProfile] = useState(null)
   const [hasAddress, setHasAddress] = useState(false)
 
+  // Mutation for manual enrollment
+  const enrollmentMutation = useMutation({
+    mutationFn: async ({ courseId, receiptImage, requiresDelivery }) => {
+      const res = await fetch("/api/enrollments/manual-request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          courseId,
+          receiptImage,
+          requiresDelivery,
+        }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        let errorMessage = "Failed to submit request"
+        let errorTitle = "Submission Error"
+        
+        // Handle Prisma errors
+        if (data.code === "UNIQUE_CONSTRAINT_VIOLATION") {
+          errorTitle = "Duplicate Entry"
+          errorMessage = data.message || `Unique constraint failed on the fields: (${data.field})`
+        } else {
+          errorMessage = data.message || data.error || errorMessage
+        }
+        
+        throw new Error(errorMessage)
+      }
+
+      return data
+    },
+    onSuccess: () => {
+      // Invalidate queries to refetch data
+      queryClient.invalidateQueries({ queryKey: ["payments"] })
+      queryClient.invalidateQueries({ queryKey: ["enrollments"] })
+      
+      toast({
+        title: "Request Submitted",
+        description: "Your enrollment request has been submitted. Please wait for instructor approval.",
+      })
+      
+      // Redirect after short delay to show toast
+      setTimeout(() => {
+        router.push("/student")
+      }, 1500)
+    },
+    onError: (error) => {
+      toast({
+        variant: "destructive",
+        title: "Submission Error",
+        description: error.message || "An error occurred. Please try again.",
+      })
+    },
+  })
+
   // Memoized computed values
   const isSubmitDisabled = useMemo(() => 
-    submitting || !receiptImage || (requiresDelivery && !hasAddress),
-    [submitting, receiptImage, requiresDelivery, hasAddress]
+    enrollmentMutation.isPending || 
+    enrollmentMutation.isLoading || 
+    !receiptImage || 
+    (requiresDelivery && !hasAddress),
+    [enrollmentMutation.isPending, enrollmentMutation.isLoading, receiptImage, requiresDelivery, hasAddress]
   )
 
   useEffect(() => {
@@ -112,61 +172,12 @@ export default function ManualEnrollment() {
       return
     }
 
-    setSubmitting(true)
-
-    try {
-      const res = await fetch("/api/enrollments/manual-request", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          courseId: params.id,
-          receiptImage,
-          requiresDelivery,
-        }),
-      })
-
-      const data = await res.json()
-
-      if (!res.ok) {
-        let errorMessage = "Failed to submit request"
-        let errorTitle = "Submission Error"
-        
-        // Handle Prisma errors
-        if (data.code === "UNIQUE_CONSTRAINT_VIOLATION") {
-          errorTitle = "Duplicate Entry"
-          errorMessage = data.message || `Unique constraint failed on the fields: (${data.field})`
-        } else {
-          errorMessage = data.message || data.error || errorMessage
-        }
-        
-        toast({
-          variant: "destructive",
-          title: errorTitle,
-          description: errorMessage,
-        })
-        setSubmitting(false)
-        return
-      }
-
-      toast({
-        title: "Request Submitted",
-        description: "Your enrollment request has been submitted. Please wait for instructor approval.",
-      })
-      
-      // Redirect after short delay to show toast
-      setTimeout(() => {
-        router.push("/student")
-      }, 1500)
-    } catch (err) {
-      const errorMessage = err.message || "An error occurred. Please try again."
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: errorMessage,
-      })
-      setSubmitting(false)
-    }
-  }, [requiresDelivery, hasAddress, receiptImage, params.id, router, toast])
+    enrollmentMutation.mutate({
+      courseId: params.id,
+      receiptImage,
+      requiresDelivery,
+    })
+  }, [requiresDelivery, hasAddress, receiptImage, params.id, enrollmentMutation, toast])
 
   if (loading) {
     return (
@@ -277,7 +288,7 @@ export default function ManualEnrollment() {
               disabled={isSubmitDisabled}
               className="btn-primary w-full py-3 sm:py-3.5 px-4 rounded-lg font-semibold text-sm sm:text-base active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {submitting ? (
+              {enrollmentMutation.isPending ? (
                 <span className="flex items-center justify-center gap-2">
                   <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin"></div>
                   Submitting...

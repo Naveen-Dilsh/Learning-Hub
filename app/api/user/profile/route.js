@@ -2,7 +2,8 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/db"
-import { unstable_cache, revalidatePath } from "next/cache"
+import { performanceLogger } from "@/lib/performance-logger"
+import { unstable_cache, revalidatePath, revalidateTag } from "next/cache"
 
 async function getUserProfile(userId) {
   return await prisma.user.findUnique({
@@ -28,9 +29,13 @@ async function getUserProfile(userId) {
 }
 
 export async function GET() {
+  const routeTimer = performanceLogger.startTimer("GET /api/user/profile")
+  const dbTimer = performanceLogger.startTimer("DB Queries")
+
   try {
     const session = await getServerSession(authOptions)
     if (!session) {
+      routeTimer.stop()
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
     }
 
@@ -47,11 +52,25 @@ export async function GET() {
     const user = await cachedGetUserProfile(session.user.id)
 
     if (!user) {
+      routeTimer.stop()
       return NextResponse.json({ message: "User not found" }, { status: 404 })
     }
 
+    const dbTime = dbTimer.stop()
+    const totalTime = routeTimer.stop()
+
+    // Log performance
+    performanceLogger.logAPIRoute("GET", "/api/user/profile", totalTime, {
+      status: 200,
+      dbTime,
+      userId: session.user.id,
+    })
+
     return NextResponse.json(user)
   } catch (error) {
+    const totalTime = routeTimer.stop()
+    const dbTime = dbTimer.duration || 0
+
     console.error("[Profile] Error fetching user:", error)
     
     let errorMessage = "Failed to fetch profile"
@@ -62,6 +81,12 @@ export async function GET() {
     } else if (error.name === "PrismaClientKnownRequestError") {
       errorMessage = "Database error occurred. Please try again."
     }
+
+    performanceLogger.logAPIRoute("GET", "/api/user/profile", totalTime, {
+      status: statusCode,
+      dbTime,
+      error: error.message,
+    })
     
     return NextResponse.json({ 
       message: errorMessage,
@@ -71,9 +96,13 @@ export async function GET() {
 }
 
 export async function PATCH(request) {
+  const routeTimer = performanceLogger.startTimer("PATCH /api/user/profile")
+  const dbTimer = performanceLogger.startTimer("DB Queries")
+
   try {
     const session = await getServerSession(authOptions)
     if (!session) {
+      routeTimer.stop()
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
     }
 
@@ -113,9 +142,22 @@ export async function PATCH(request) {
 
     // Invalidate cache
     revalidatePath("/api/user/profile")
+    revalidateTag(`user-profile-${session.user.id}`)
+
+    const dbTime = dbTimer.stop()
+    const totalTime = routeTimer.stop()
+
+    // Log performance
+    performanceLogger.logAPIRoute("PATCH", "/api/user/profile", totalTime, {
+      status: 200,
+      dbTime,
+      userId: session.user.id,
+    })
 
     return NextResponse.json(updatedUser)
   } catch (error) {
+    const totalTime = routeTimer.stop()
+    const dbTime = dbTimer.duration || 0
     console.error("[Profile] Error updating user:", error)
     
     // Handle Prisma errors
@@ -123,6 +165,13 @@ export async function PATCH(request) {
       const field = Array.isArray(error.meta?.target) ? error.meta.target[0] : error.meta?.target || "field"
       const model = error.meta?.model || "Model"
       
+      performanceLogger.logAPIRoute("PATCH", "/api/user/profile", totalTime, {
+        status: 400,
+        dbTime,
+        error: error.message,
+        code: error.code,
+      })
+
       return NextResponse.json({ 
         message: `Invalid Prisma.${model.toLowerCase()}.update() invocation:\n\nUnique constraint failed on the fields: (${field})`,
         error: error.message,
@@ -141,6 +190,12 @@ export async function PATCH(request) {
     } else if (error.name === "PrismaClientKnownRequestError") {
       errorMessage = "Database error occurred. Please try again."
     }
+
+    performanceLogger.logAPIRoute("PATCH", "/api/user/profile", totalTime, {
+      status: statusCode,
+      dbTime,
+      error: error.message,
+    })
     
     return NextResponse.json({ 
       message: errorMessage,
