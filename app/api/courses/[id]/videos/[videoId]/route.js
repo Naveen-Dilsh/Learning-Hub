@@ -1,103 +1,243 @@
 import { prisma } from "@/lib/db"
+import { performanceLogger } from "@/lib/performance-logger"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { NextResponse } from "next/server"
+import { revalidatePath } from "next/cache"
 
 export async function PUT(request, { params }) {
+  const routeTimer = performanceLogger.startTimer('PUT /api/courses/[id]/videos/[videoId]')
+  const dbTimer = performanceLogger.startTimer('DB Queries')
+
   try {
     const session = await getServerSession(authOptions)
 
     if (!session) {
+      routeTimer.stop()
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
     }
 
     const video = await prisma.video.findUnique({
       where: { id: params.videoId },
-      include: { course: true },
+      select: {
+        id: true,
+        course: {
+          select: {
+            id: true,
+            instructorId: true,
+          },
+        },
+      },
     })
 
     if (!video) {
+      routeTimer.stop()
       return NextResponse.json({ message: "Video not found" }, { status: 404 })
     }
 
     if (video.course.instructorId !== session.user.id && session.user.role !== "ADMIN") {
+      routeTimer.stop()
       return NextResponse.json({ message: "Forbidden" }, { status: 403 })
     }
 
-    const { title, description, duration, order } = await request.json()
+    const body = await request.json()
+    const { title, description, duration, order } = body
+
+    // Validate input
+    if (title !== undefined && (!title || title.trim().length < 1)) {
+      routeTimer.stop()
+      return NextResponse.json({ message: "Title cannot be empty" }, { status: 400 })
+    }
+
+    if (duration !== undefined && duration < 0) {
+      routeTimer.stop()
+      return NextResponse.json({ message: "Duration must be a positive number" }, { status: 400 })
+    }
+
+    if (order !== undefined && order < 0) {
+      routeTimer.stop()
+      return NextResponse.json({ message: "Order must be a positive number" }, { status: 400 })
+    }
 
     const updatedVideo = await prisma.video.update({
       where: { id: params.videoId },
       data: {
-        ...(title && { title }),
-        ...(description && { description }),
-        ...(duration !== undefined && { duration }),
-        ...(order !== undefined && { order }),
+        ...(title !== undefined && { title: title.trim() }),
+        ...(description !== undefined && { description: description?.trim() || null }),
+        ...(duration !== undefined && { duration: Number.parseInt(duration) }),
+        ...(order !== undefined && { order: Number.parseInt(order) }),
       },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        duration: true,
+        order: true,
+        isFree: true,
+        cloudflareStreamId: true,
+      },
+    })
+
+    // Invalidate cache
+    revalidatePath(`/api/courses/${params.id}`)
+    revalidatePath(`/api/courses/${params.id}/videos`)
+
+    const dbTime = dbTimer.stop()
+    const totalTime = routeTimer.stop()
+
+    performanceLogger.logAPIRoute('PUT', `/api/courses/${params.id}/videos/${params.videoId}`, totalTime, {
+      status: 200,
+      dbTime,
+      videoId: params.videoId,
     })
 
     return NextResponse.json(updatedVideo)
   } catch (error) {
+    const totalTime = routeTimer.stop()
+    const dbTime = dbTimer.duration || 0
+
     console.error("Error updating video:", error)
-    return NextResponse.json({ message: "Internal server error" }, { status: 500 })
+
+    performanceLogger.logAPIRoute('PUT', `/api/courses/${params.id}/videos/${params.videoId}`, totalTime, {
+      status: 500,
+      dbTime,
+      error: error.message,
+    })
+
+    // Handle Prisma errors
+    if (error.code === 'P2025') {
+      return NextResponse.json({ message: "Video not found" }, { status: 404 })
+    }
+
+    return NextResponse.json(
+      { message: error.message || "Internal server error" },
+      { status: 500 }
+    )
   }
 }
 
 export async function PATCH(request, { params }) {
+  const routeTimer = performanceLogger.startTimer('PATCH /api/courses/[id]/videos/[videoId]')
+  const dbTimer = performanceLogger.startTimer('DB Queries')
+
   try {
     const session = await getServerSession(authOptions)
 
     if (!session) {
+      routeTimer.stop()
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
     }
 
     const video = await prisma.video.findUnique({
       where: { id: params.videoId },
-      include: { course: true },
+      select: {
+        id: true,
+        course: {
+          select: {
+            id: true,
+            instructorId: true,
+          },
+        },
+      },
     })
 
     if (!video) {
+      routeTimer.stop()
       return NextResponse.json({ message: "Video not found" }, { status: 404 })
     }
 
     if (video.course.instructorId !== session.user.id && session.user.role !== "ADMIN") {
+      routeTimer.stop()
       return NextResponse.json({ message: "Forbidden" }, { status: 403 })
     }
 
     const { isFree } = await request.json()
 
+    if (typeof isFree !== "boolean") {
+      routeTimer.stop()
+      return NextResponse.json({ message: "isFree must be a boolean" }, { status: 400 })
+    }
+
     const updatedVideo = await prisma.video.update({
       where: { id: params.videoId },
-      data: {
-        ...(isFree !== undefined && { isFree }),
+      data: { isFree },
+      select: {
+        id: true,
+        title: true,
+        isFree: true,
       },
+    })
+
+    // Invalidate cache
+    revalidatePath(`/api/courses/${params.id}`)
+    revalidatePath(`/api/courses/${params.id}/videos`)
+
+    const dbTime = dbTimer.stop()
+    const totalTime = routeTimer.stop()
+
+    performanceLogger.logAPIRoute('PATCH', `/api/courses/${params.id}/videos/${params.videoId}`, totalTime, {
+      status: 200,
+      dbTime,
+      videoId: params.videoId,
     })
 
     return NextResponse.json(updatedVideo)
   } catch (error) {
+    const totalTime = routeTimer.stop()
+    const dbTime = dbTimer.duration || 0
+
     console.error("Error updating video:", error)
-    return NextResponse.json({ message: "Internal server error" }, { status: 500 })
+
+    performanceLogger.logAPIRoute('PATCH', `/api/courses/${params.id}/videos/${params.videoId}`, totalTime, {
+      status: 500,
+      dbTime,
+      error: error.message,
+    })
+
+    // Handle Prisma errors
+    if (error.code === 'P2025') {
+      return NextResponse.json({ message: "Video not found" }, { status: 404 })
+    }
+
+    return NextResponse.json(
+      { message: error.message || "Internal server error" },
+      { status: 500 }
+    )
   }
 }
 
 export async function DELETE(request, { params }) {
+  const routeTimer = performanceLogger.startTimer('DELETE /api/courses/[id]/videos/[videoId]')
+  const dbTimer = performanceLogger.startTimer('DB Queries')
+
   try {
     const session = await getServerSession(authOptions)
 
     if (!session) {
+      routeTimer.stop()
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
     }
 
     const video = await prisma.video.findUnique({
       where: { id: params.videoId },
-      include: { course: true },
+      select: {
+        id: true,
+        course: {
+          select: {
+            id: true,
+            instructorId: true,
+          },
+        },
+      },
     })
 
     if (!video) {
+      routeTimer.stop()
       return NextResponse.json({ message: "Video not found" }, { status: 404 })
     }
 
     if (video.course.instructorId !== session.user.id && session.user.role !== "ADMIN") {
+      routeTimer.stop()
       return NextResponse.json({ message: "Forbidden" }, { status: 403 })
     }
 
@@ -105,9 +245,40 @@ export async function DELETE(request, { params }) {
       where: { id: params.videoId },
     })
 
+    // Invalidate cache
+    revalidatePath(`/api/courses/${params.id}`)
+    revalidatePath(`/api/courses/${params.id}/videos`)
+
+    const dbTime = dbTimer.stop()
+    const totalTime = routeTimer.stop()
+
+    performanceLogger.logAPIRoute('DELETE', `/api/courses/${params.id}/videos/${params.videoId}`, totalTime, {
+      status: 200,
+      dbTime,
+      videoId: params.videoId,
+    })
+
     return NextResponse.json({ message: "Video deleted successfully" })
   } catch (error) {
+    const totalTime = routeTimer.stop()
+    const dbTime = dbTimer.duration || 0
+
     console.error("Error deleting video:", error)
-    return NextResponse.json({ message: "Internal server error" }, { status: 500 })
+
+    performanceLogger.logAPIRoute('DELETE', `/api/courses/${params.id}/videos/${params.videoId}`, totalTime, {
+      status: 500,
+      dbTime,
+      error: error.message,
+    })
+
+    // Handle Prisma errors
+    if (error.code === 'P2025') {
+      return NextResponse.json({ message: "Video not found" }, { status: 404 })
+    }
+
+    return NextResponse.json(
+      { message: error.message || "Internal server error" },
+      { status: 500 }
+    )
   }
 }

@@ -59,7 +59,7 @@ export async function GET(request) {
     if (published === "true" && !instructorId) {
       courses = await getCachedCourses(where)
     } else {
-      // No cache for instructor-specific or admin views
+      // For instructor-specific queries, use optimized select
       courses = await prisma.course.findMany({
         where,
         select: {
@@ -74,7 +74,6 @@ export async function GET(request) {
             select: { 
               id: true, 
               name: true,
-              email: true 
             } 
           },
           _count: { 
