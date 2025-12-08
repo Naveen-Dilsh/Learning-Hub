@@ -1,46 +1,58 @@
 "use client"
 
 import { useSession } from "next-auth/react"
+import { useQuery } from "@tanstack/react-query"
 import Link from "next/link"
-import { useEffect, useState } from "react"
+import { useEffect } from "react"
 import { BookOpen, Zap, Award } from "lucide-react"
 import { useDashboard } from "@/lib/hooks"
 import LoadingBubbles from "@/components/loadingBubbles"
 
 
 export default function StudentDashboard() {
-  const { data: session } = useSession()
+  const { data: session, status: authStatus } = useSession()
   const { setActiveTab } = useDashboard()
-  const [enrolledCourses, setEnrolledCourses] = useState([])
-  const [stats, setStats] = useState({ totalCourses: 0, hoursWatched: 0, completedCourses: 0, certificates: 0 })
-  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     setActiveTab("dashboard")
   }, [setActiveTab])
 
-  useEffect(() => {
-    if (session?.user?.id) {
-      fetchEnrolledCourses()
-    }
-  }, [session])
-
-  const fetchEnrolledCourses = async () => {
-    try {
-      const res = await fetch(`/api/student/enrollments?studentId=${session.user.id}`)
+  const {
+    data: enrollmentData,
+    isLoading,
+    isError,
+    error,
+    isSuccess,
+    isFetching,
+  } = useQuery({
+    queryKey: ["enrollments", session?.user?.id],
+    queryFn: async () => {
+      if (!session?.user?.id) {
+        return { enrollments: [], stats: { totalCourses: 0, hoursWatched: 0, completedCourses: 0, certificates: 0 } }
+      }
+      
+      const res = await fetch(`/api/student/enrollments?studentId=${session.user.id}`, {
+        cache: "no-store",
+      })
       if (!res.ok) throw new Error("Failed to fetch enrollments")
-      const data = await res.json()
-      setEnrolledCourses(data.enrollments.slice(0, 3))
-      setStats(data.stats)
-    } catch (error) {
-      console.error("Error fetching enrollments:", error)
-    } finally {
-      setLoading(false)
-    }
+      return await res.json()
+    },
+    enabled: !!session?.user?.id,
+    staleTime: 30 * 1000, // 30 seconds
+  })
+
+  const enrolledCourses = enrollmentData?.enrollments?.slice(0, 3) || []
+  const stats = enrollmentData?.stats || { totalCourses: 0, hoursWatched: 0, completedCourses: 0, certificates: 0 }
+
+  // Show loading if query is loading OR if session is not ready yet
+  if (isLoading || authStatus === "loading" || !session?.user?.id) {
+    return <LoadingBubbles/>;
   }
 
-  if (loading) {
-    return <LoadingBubbles/>;
+  // Show error state (optional - can show error message or fallback UI)
+  if (isError) {
+    console.error("Error fetching enrollments:", error)
+    // Still render the page with empty data, but could show error message
   }
 
   return (

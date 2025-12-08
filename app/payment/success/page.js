@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useParams, useSearchParams } from "next/navigation"
-// import { Button } from "@/components/ui/button"
+import { useQueryClient } from "@tanstack/react-query"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { CheckCircle, Loader2, XCircle } from "lucide-react"
 import Link from "next/link"
@@ -10,6 +10,7 @@ import Link from "next/link"
 export default function PaymentSuccessPage() {
   const params = useParams()
   const searchParams = useSearchParams()
+  const queryClient = useQueryClient()
   const [status, setStatus] = useState("verifying")
   const [message, setMessage] = useState("")
 
@@ -37,6 +38,12 @@ export default function PaymentSuccessPage() {
       if (response.ok) {
         setStatus("success")
         setMessage(data.message || "Payment verified successfully!")
+        
+        // Invalidate and immediately refetch queries to ensure fresh data
+        await Promise.all([
+          queryClient.refetchQueries({ queryKey: ["payments"] }),
+          queryClient.refetchQueries({ queryKey: ["enrollments"] }),
+        ])
       } else {
         setStatus("error")
         setMessage(data.error || "Failed to verify payment")

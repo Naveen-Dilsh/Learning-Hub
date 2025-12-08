@@ -1,47 +1,53 @@
 import { prisma } from "@/lib/db"
+import { performanceLogger } from "@/lib/performance-logger"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { NextResponse } from "next/server"
+import { unstable_cache } from "next/cache"
 
-export async function GET(request) {
-  try {
-    const session = await getServerSession(authOptions)
-
-    if (!session) {
-      return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
-    }
-
-    if (session.user.role !== "INSTRUCTOR" && session.user.role !== "ADMIN") {
-      return NextResponse.json({ message: "Forbidden" }, { status: 403 })
-    }
-
-    const { searchParams } = new URL(request.url)
-    const status = searchParams.get("status") // PENDING, PROCESSING, SHIPPED, DELIVERED, CANCELLED
-    const courseId = searchParams.get("courseId")
-
-    // Build where clause
-    const where = {
-      enrollment: {
-        course: {
-          instructorId: session.user.id,
-        },
-        status: "APPROVED", // Only show deliveries for approved enrollments
+async function getDeliveriesData(instructorId, status, courseId) {
+  // Build where clause
+  const where = {
+    enrollment: {
+      course: {
+        instructorId,
       },
-    }
+      status: "APPROVED",
+    },
+  }
 
-    if (status) {
-      where.status = status
-    }
+  if (status) {
+    where.status = status
+  }
 
-    if (courseId) {
-      where.enrollment.courseId = courseId
-    }
+  if (courseId) {
+    where.enrollment.courseId = courseId
+  }
 
-    const deliveries = await prisma.delivery.findMany({
+  // Fetch deliveries and counts in parallel
+  const [deliveries, counts] = await Promise.all([
+    prisma.delivery.findMany({
       where,
-      include: {
+      select: {
+        id: true,
+        fullName: true,
+        phone: true,
+        email: true,
+        addressLine1: true,
+        addressLine2: true,
+        city: true,
+        district: true,
+        postalCode: true,
+        status: true,
+        trackingNumber: true,
+        courier: true,
+        notes: true,
+        createdAt: true,
+        shippedAt: true,
+        deliveredAt: true,
         enrollment: {
-          include: {
+          select: {
+            id: true,
             student: {
               select: {
                 id: true,
@@ -60,40 +66,101 @@ export async function GET(request) {
         },
       },
       orderBy: { createdAt: "desc" },
-    })
-
-    // Get delivery counts by status
-    const counts = await prisma.delivery.groupBy({
+    }),
+    prisma.delivery.groupBy({
       by: ["status"],
       where: {
         enrollment: {
           course: {
-            instructorId: session.user.id,
+            instructorId,
           },
           status: "APPROVED",
         },
       },
       _count: true,
-    })
+    }),
+  ])
 
-    const statusCounts = {
-      PENDING: 0,
-      PROCESSING: 0,
-      SHIPPED: 0,
-      DELIVERED: 0,
-      CANCELLED: 0,
+  const statusCounts = {
+    PENDING: 0,
+    PROCESSING: 0,
+    SHIPPED: 0,
+    DELIVERED: 0,
+    CANCELLED: 0,
+  }
+
+  counts.forEach((c) => {
+    statusCounts[c.status] = c._count
+  })
+
+  return {
+    deliveries,
+    counts: statusCounts,
+  }
+}
+
+export async function GET(request) {
+  const routeTimer = performanceLogger.startTimer("GET /api/instructor/deliveries")
+  const dbTimer = performanceLogger.startTimer("DB Queries")
+
+  try {
+    const session = await getServerSession(authOptions)
+
+    if (!session) {
+      routeTimer.stop()
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
     }
 
-    counts.forEach((c) => {
-      statusCounts[c.status] = c._count
+    if (session.user.role !== "INSTRUCTOR" && session.user.role !== "ADMIN") {
+      routeTimer.stop()
+      return NextResponse.json({ message: "Forbidden" }, { status: 403 })
+    }
+
+    const { searchParams } = new URL(request.url)
+    const status = searchParams.get("status")
+    const courseId = searchParams.get("courseId")
+
+    // Cache deliveries data for 30 seconds
+    const cacheKey = `instructor-deliveries-${session.user.id}-${status || "all"}-${courseId || "all"}`
+    const cachedGetDeliveriesData = unstable_cache(
+      () => getDeliveriesData(session.user.id, status, courseId),
+      [cacheKey],
+      {
+        revalidate: 30,
+        tags: [`instructor-deliveries-${session.user.id}`],
+      }
+    )
+
+    const data = await cachedGetDeliveriesData()
+
+    const dbTime = dbTimer.stop()
+    const totalTime = routeTimer.stop()
+
+    // Log performance
+    performanceLogger.logAPIRoute("GET", "/api/instructor/deliveries", totalTime, {
+      status: 200,
+      dbTime,
+      instructorId: session.user.id,
+      deliveriesCount: data.deliveries.length,
+      statusFilter: status || "all",
     })
 
-    return NextResponse.json({
-      deliveries,
-      counts: statusCounts,
-    })
+    return NextResponse.json(data)
   } catch (error) {
+    const totalTime = routeTimer.stop()
+    const dbTime = dbTimer.duration || 0
+
     console.error("Error fetching deliveries:", error)
-    return NextResponse.json({ message: "Internal server error" }, { status: 500 })
+
+    performanceLogger.logAPIRoute("GET", "/api/instructor/deliveries", totalTime, {
+      status: 500,
+      dbTime,
+      error: error.message,
+    })
+
+    return NextResponse.json(
+      { message: error.message || "Internal server error" },
+      { status: 500 }
+    )
   }
 }

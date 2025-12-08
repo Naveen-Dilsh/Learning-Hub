@@ -1,8 +1,9 @@
 "use client"
 
-import { useEffect, useState, useCallback, useMemo } from "react"
+import { useMemo } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
+import { useQuery } from "@tanstack/react-query"
 import { useToast } from "@/hooks/use-toast"
 import Link from "next/link"
 import LoadingBubbles from "@/components/loadingBubbles"
@@ -47,21 +48,21 @@ export default function StudentDeliveries() {
   const { data: session, status: authStatus } = useSession()
   const router = useRouter()
   const { toast } = useToast()
-  const [deliveries, setDeliveries] = useState([])
-  const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    if (authStatus === "unauthenticated") {
-      router.push("/auth/signin")
-    }
-  }, [authStatus, router])
-
-  const fetchDeliveries = useCallback(async () => {
-    if (!session?.user?.id) return
-
-    try {
+  const {
+    data: deliveries = [],
+    isLoading,
+    isError,
+    error,
+    isSuccess,
+    isFetching,
+  } = useQuery({
+    queryKey: ["deliveries", session?.user?.id],
+    queryFn: async () => {
+      if (!session?.user?.id) return []
+      
       const res = await fetch("/api/student/deliveries", {
-        next: { revalidate: 60 }
+        cache: "no-store",
       })
       
       if (!res.ok) {
@@ -70,23 +71,30 @@ export default function StudentDeliveries() {
       }
 
       const data = await res.json()
-      setDeliveries(Array.isArray(data) ? data : [])
-    } catch (error) {
+      return Array.isArray(data) ? data : []
+    },
+    enabled: authStatus === "authenticated" && !!session?.user?.id,
+    staleTime: 30 * 1000, // 30 seconds
+    onError: (error) => {
       toast({
         variant: "destructive",
         title: "Error Loading Deliveries",
         description: error.message || "Failed to load deliveries. Please try again.",
       })
-    } finally {
-      setLoading(false)
-    }
-  }, [session?.user?.id, toast])
+    },
+    onSuccess: () => {
+      // Mark deliveries as viewed when data loads successfully
+      if (typeof window !== "undefined") {
+        localStorage.setItem("deliveries-viewed", "true")
+      }
+    },
+  })
 
-  useEffect(() => {
-    if (session) {
-      fetchDeliveries()
-    }
-  }, [session, fetchDeliveries])
+  // Redirect if unauthenticated
+  if (authStatus === "unauthenticated") {
+    router.push("/auth/signin")
+    return null
+  }
 
   // Memoized status counts
   const statusCounts = useMemo(() => {
@@ -96,10 +104,39 @@ export default function StudentDeliveries() {
     }, {})
   }, [deliveries])
 
-  if (loading) {
+  // Show loading if query is loading OR if session is not ready yet
+  if (isLoading || authStatus === "loading" || !session?.user?.id) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background">
         <LoadingBubbles />
+      </div>
+    )
+  }
+
+  // Show error state (optional - error toast already shown via onError)
+  if (isError) {
+    return (
+      <div className="min-h-screen bg-background">
+        <div className="bg-card/95 backdrop-blur-sm border-b border-border sticky top-0 z-10">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
+            <Link 
+              href="/student"
+              className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground mb-2 sm:mb-3 font-medium transition-colors text-sm sm:text-base"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Back to Dashboard
+            </Link>
+            <h1 className="text-2xl sm:text-3xl font-bold text-foreground">My Deliveries</h1>
+            <p className="text-sm sm:text-base text-muted-foreground mt-1">Track your course material deliveries</p>
+          </div>
+        </div>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+          <div className="text-center py-12 sm:py-16 bg-card rounded-xl border border-border">
+            <Package className="w-12 h-12 sm:w-16 sm:h-16 text-destructive mx-auto mb-4" />
+            <p className="text-base sm:text-lg font-semibold text-destructive mb-2">Error Loading Deliveries</p>
+            <p className="text-sm sm:text-base text-muted-foreground">{error?.message || "Failed to load deliveries. Please try again."}</p>
+          </div>
+        </div>
       </div>
     )
   }

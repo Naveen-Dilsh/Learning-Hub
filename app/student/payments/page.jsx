@@ -1,7 +1,8 @@
 "use client"
 
 import { useSession } from "next-auth/react"
-import { useEffect, useState, useCallback, useMemo } from "react"
+import { useQuery } from "@tanstack/react-query"
+import { useMemo } from "react"
 import { useToast } from "@/hooks/use-toast"
 import { CreditCard, Calendar, DollarSign, CheckCircle2, Clock, XCircle, AlertCircle, Download } from "lucide-react"
 import LoadingBubbles from "@/components/loadingBubbles"
@@ -61,17 +62,23 @@ const PaymentMethodBadge = ({ method }) => {
 }
 
 export default function Payments() {
-  const { data: session } = useSession()
+  const { data: session, status: authStatus } = useSession()
   const { toast } = useToast()
-  const [payments, setPayments] = useState([])
-  const [loading, setLoading] = useState(true)
 
-  const fetchPayments = useCallback(async () => {
-    if (!session?.user?.id) return
-
-    try {
+  const {
+    data: payments = [],
+    isLoading,
+    isError,
+    error,
+    isSuccess,
+    isFetching,
+  } = useQuery({
+    queryKey: ["payments", session?.user?.id],
+    queryFn: async () => {
+      if (!session?.user?.id) return []
+      
       const res = await fetch("/api/student/payments", {
-        next: { revalidate: 60 }
+        cache: "no-store",
       })
       
       if (!res.ok) {
@@ -80,23 +87,19 @@ export default function Payments() {
       }
 
       const data = await res.json()
-      setPayments(Array.isArray(data) ? data : [])
-    } catch (error) {
+      return Array.isArray(data) ? data : []
+    },
+    enabled: authStatus === "authenticated" && !!session?.user?.id,
+    staleTime: 30 * 1000, // 30 seconds
+    refetchOnMount: "always", // Always refetch when component mounts to ensure fresh data
+    onError: (error) => {
       toast({
         variant: "destructive",
         title: "Error Loading Payments",
         description: error.message || "Failed to load payment history. Please try again.",
       })
-    } finally {
-      setLoading(false)
-    }
-  }, [session?.user?.id, toast])
-
-  useEffect(() => {
-    if (session?.user?.id) {
-      fetchPayments()
-    }
-  }, [session, fetchPayments])
+    },
+  })
 
   // Memoized computed values
   const totalAmount = useMemo(() => 
@@ -116,10 +119,31 @@ export default function Payments() {
     [payments]
   )
 
-  if (loading) {
+  // Show loading if query is loading OR if session is not ready yet
+  if (isLoading || authStatus === "loading" || !session?.user?.id) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background">
         <LoadingBubbles />
+      </div>
+    )
+  }
+
+  // Show error state (optional - error toast already shown via onError)
+  if (isError) {
+    return (
+      <div className="min-h-screen bg-background">
+        <div className="bg-card/95 backdrop-blur-sm border-b border-border sticky top-0 z-10">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
+            <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-1 sm:mb-2">Payment History</h1>
+            <p className="text-sm sm:text-base text-muted-foreground">View your course purchase history and payment details</p>
+          </div>
+        </div>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+          <div className="bg-card rounded-xl shadow-sm border border-border p-8 sm:p-12 text-center">
+            <p className="text-base sm:text-lg font-semibold text-destructive mb-2">Error Loading Payments</p>
+            <p className="text-sm sm:text-base text-muted-foreground">{error?.message || "Failed to load payment history. Please try again."}</p>
+          </div>
+        </div>
       </div>
     )
   }

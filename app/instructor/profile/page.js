@@ -2,193 +2,597 @@
 
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
-import { useEffect, useState } from "react"
-import { User, Mail, FileText, Camera, Save, AlertCircle, CheckCircle } from "lucide-react"
+import { useState, useEffect, useCallback, useMemo } from "react"
+import { useToast } from "@/hooks/use-toast"
+import ImageUpload from "@/components/image-upload"
+import LoadingBubbles from "@/components/loadingBubbles"
+import Image from "next/image"
+import {
+  Edit2,
+  Save,
+  X,
+  Mail,
+  Phone,
+  MapPin,
+  User,
+  Calendar,
+  BookOpen,
+  GraduationCap,
+} from "lucide-react"
+
+// Sri Lankan districts for dropdown
+const SRI_LANKAN_DISTRICTS = [
+  "Ampara",
+  "Anuradhapura",
+  "Badulla",
+  "Batticaloa",
+  "Colombo",
+  "Galle",
+  "Gampaha",
+  "Hambantota",
+  "Jaffna",
+  "Kalutara",
+  "Kandy",
+  "Kegalle",
+  "Kilinochchi",
+  "Kurunegala",
+  "Mannar",
+  "Matale",
+  "Matara",
+  "Moneragala",
+  "Mullaitivu",
+  "Nuwara Eliya",
+  "Polonnaruwa",
+  "Puttalam",
+  "Ratnapura",
+  "Trincomalee",
+  "Vavuniya",
+]
 
 export default function ProfileSettings() {
-  const { data: session, status } = useSession()
+  const { data: session, status: authStatus, update } = useSession()
   const router = useRouter()
-  const [name, setName] = useState("")
-  const [bio, setBio] = useState("")
+  const { toast } = useToast()
+  const [profileData, setProfileData] = useState(null)
+  const [formData, setFormData] = useState({
+    name: "",
+    email: "",
+    image: "",
+    phone: "",
+    addressLine1: "",
+    addressLine2: "",
+    city: "",
+    district: "",
+    postalCode: "",
+    country: "Sri Lanka",
+    createdAt: "",
+  })
+  const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [notification, setNotification] = useState({ show: false, message: "", type: "" })
+  const [isEditing, setIsEditing] = useState(false)
 
   useEffect(() => {
-    if (status === "unauthenticated") {
+    if (authStatus === "unauthenticated") {
       router.push("/auth/signin")
+    } else if (session?.user?.role !== "INSTRUCTOR" && session?.user?.role !== "ADMIN") {
+      router.push("/")
     }
-  }, [status, router])
+  }, [authStatus, session, router])
+
+  const fetchProfile = useCallback(async () => {
+    try {
+      setLoading(true)
+      const res = await fetch("/api/user/profile", {
+        cache: "no-store",
+      })
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}))
+        throw new Error(errorData.message || "Failed to fetch profile")
+      }
+
+      const data = await res.json()
+      setProfileData(data)
+      setFormData({
+        name: data.name || "",
+        email: data.email || "",
+        image: data.image || "",
+        phone: data.phone || "",
+        addressLine1: data.addressLine1 || "",
+        addressLine2: data.addressLine2 || "",
+        city: data.city || "",
+        district: data.district || "",
+        postalCode: data.postalCode || "",
+        country: data.country || "Sri Lanka",
+        createdAt: data.createdAt || "",
+      })
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Error Loading Profile",
+        description: error.message || "Failed to load profile. Please try again.",
+      })
+    } finally {
+      setLoading(false)
+    }
+  }, [toast])
 
   useEffect(() => {
-    if (session?.user) {
-      setName(session.user.name || "")
-      setBio(session.user.bio || "")
+    if (session?.user?.id) {
+      fetchProfile()
+    }
+  }, [session, fetchProfile])
+
+  const handleChange = useCallback((e) => {
+    const { name, value } = e.target
+    setFormData((prev) => ({ ...prev, [name]: value }))
+  }, [])
+
+  const handleImageUpload = useCallback((imageUrl) => {
+    setFormData((prev) => ({ ...prev, image: imageUrl }))
+  }, [])
+
+  const handleEdit = useCallback(() => {
+    setIsEditing(true)
+  }, [])
+
+  const handleCancel = useCallback(() => {
+    if (profileData) {
+      setFormData({
+        name: profileData.name || "",
+        email: profileData.email || "",
+        image: profileData.image || "",
+        phone: profileData.phone || "",
+        addressLine1: profileData.addressLine1 || "",
+        addressLine2: profileData.addressLine2 || "",
+        city: profileData.city || "",
+        district: profileData.district || "",
+        postalCode: profileData.postalCode || "",
+        country: profileData.country || "Sri Lanka",
+        createdAt: profileData.createdAt || "",
+      })
+    }
+    setIsEditing(false)
+  }, [profileData])
+
+  const handleSubmit = useCallback(
+    async (e) => {
+      e.preventDefault()
+      setSaving(true)
+
+      try {
+        const res = await fetch("/api/user/profile", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: formData.name,
+            image: formData.image,
+            phone: formData.phone,
+            addressLine1: formData.addressLine1,
+            addressLine2: formData.addressLine2,
+            city: formData.city,
+            district: formData.district,
+            postalCode: formData.postalCode,
+            country: formData.country,
+          }),
+        })
+
+        if (!res.ok) {
+          const errorData = await res.json().catch(() => ({}))
+          throw new Error(errorData.message || "Failed to update profile")
+        }
+
+        const updatedUser = await res.json()
+        await update({
+          name: updatedUser.name,
+          image: updatedUser.image,
+        })
+
+        setProfileData(updatedUser)
+        setIsEditing(false)
+
+        toast({
+          title: "Profile Updated",
+          description: "Your profile has been updated successfully.",
+        })
+      } catch (error) {
+        toast({
+          variant: "destructive",
+          title: "Error Updating Profile",
+          description: error.message || "Failed to update profile. Please try again.",
+        })
+      } finally {
+        setSaving(false)
+      }
+    },
+    [formData, update, toast]
+  )
+
+  // Memoized computed values
+  const hasCompleteAddress = useMemo(
+    () => Boolean(formData.phone && formData.addressLine1 && formData.city && formData.district),
+    [formData]
+  )
+
+  const memberSince = useMemo(() => {
+    if (!formData.createdAt) return "N/A"
+    return new Date(formData.createdAt).toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "long",
+    })
+  }, [formData.createdAt])
+
+  // Get instructor stats
+  const [instructorStats, setInstructorStats] = useState({ totalCourses: 0, totalStudents: 0 })
+  useEffect(() => {
+    if (session?.user?.id) {
+      fetch(`/api/instructor/dashboard?instructorId=${session.user.id}`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.stats) {
+            setInstructorStats({
+              totalCourses: data.stats.totalCourses || 0,
+              totalStudents: data.stats.totalStudents || 0,
+            })
+          }
+        })
+        .catch(() => {})
     }
   }, [session])
 
-  const showNotification = (message, type) => {
-    setNotification({ show: true, message, type })
-    setTimeout(() => {
-      setNotification({ show: false, message: "", type: "" })
-    }, 4000)
-  }
-
-  const handleSave = async () => {
-    setSaving(true)
-    try {
-      // TODO: Implement profile update API
-      console.log("Saving profile:", { name, bio })
-      showNotification("Profile updated successfully!", "success")
-    } catch (error) {
-      console.error("Error saving profile:", error)
-      showNotification("Failed to update profile", "error")
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  if (status === "loading") {
+  if (authStatus === "loading" || loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-          <p className="text-slate-600 font-medium">Loading profile...</p>
-        </div>
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <LoadingBubbles />
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50">
-      {notification.show && (
-        <div className="fixed top-4 right-4 z-50">
-          <div
-            className={`flex items-center gap-3 px-6 py-4 rounded-xl shadow-lg border ${
-              notification.type === "success"
-                ? "bg-emerald-50 border-emerald-200 text-emerald-800"
-                : "bg-red-50 border-red-200 text-red-800"
-            }`}
-          >
-            {notification.type === "success" ? (
-              <CheckCircle className="w-5 h-5 flex-shrink-0" />
-            ) : (
-              <AlertCircle className="w-5 h-5 flex-shrink-0" />
-            )}
-            <p className="font-medium">{notification.message}</p>
-          </div>
+    <div className="min-h-screen bg-background">
+      {/* Header */}
+      <div className="bg-card/95 backdrop-blur-sm border-b border-border sticky top-0 z-10">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
+          <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Profile Settings</h1>
+          <p className="text-sm sm:text-base text-muted-foreground mt-1">
+            Manage your instructor profile and contact information
+          </p>
         </div>
-      )}
+      </div>
 
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-8">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-600 rounded-xl flex items-center justify-center">
-              <User className="w-6 h-6 text-white" />
-            </div>
-            <div>
-              <h1 className="text-4xl font-bold text-slate-900">Profile Settings</h1>
-              <p className="text-slate-600 flex items-center gap-2 mt-1">
-                <FileText className="w-4 h-4" />
-                Update your profile information
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-          <div className="px-8 py-6 border-b border-slate-200 bg-gradient-to-r from-slate-50 to-purple-50">
-            <h2 className="text-xl font-bold text-slate-900">Personal Information</h2>
-            <p className="text-sm text-slate-600 mt-1">Manage your public profile details</p>
-          </div>
-
-          <div className="p-8 space-y-6">
-            <div>
-              <label className="block text-sm font-semibold text-slate-900 mb-4">Profile Picture</label>
-              <div className="flex items-center gap-6">
-                <div className="relative">
-                  <div className="w-24 h-24 bg-gradient-to-br from-blue-100 to-purple-100 rounded-full flex items-center justify-center">
-                    <User className="w-12 h-12 text-blue-600" />
-                  </div>
-                  <button className="absolute bottom-0 right-0 w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center hover:bg-blue-700 transition-colors shadow-lg">
-                    <Camera className="w-4 h-4 text-white" />
-                  </button>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8">
+          {/* Profile Card - Left Sidebar */}
+          <div className="lg:col-span-1">
+            <div className="bg-card rounded-xl border border-border p-4 sm:p-6 sticky top-24">
+              {/* Profile Picture */}
+              <div className="flex flex-col items-center mb-4 sm:mb-6">
+                <div className="relative w-24 h-24 sm:w-32 sm:h-32 rounded-full overflow-hidden border-4 border-primary/20 mb-3 sm:mb-4">
+                  {formData.image ? (
+                    <Image
+                      src={formData.image}
+                      alt={formData.name || "Profile"}
+                      fill
+                      className="object-cover"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-primary-foreground text-2xl sm:text-3xl font-bold">
+                      {formData.name?.[0]?.toUpperCase() || "?"}
+                    </div>
+                  )}
                 </div>
-                <div>
-                  <button className="px-6 py-2.5 border-2 border-slate-300 text-slate-700 rounded-xl hover:bg-slate-50 hover:border-slate-400 transition-all font-medium">
-                    Upload Photo
+                <h2 className="text-xl sm:text-2xl font-bold text-foreground text-center mb-1">
+                  {formData.name || "Instructor"}
+                </h2>
+                <p className="text-sm text-muted-foreground text-center mb-4">{formData.email}</p>
+
+                {!isEditing && (
+                  <button
+                    onClick={handleEdit}
+                    className="btn-primary inline-flex items-center gap-2 px-4 sm:px-6 py-2 sm:py-2.5 rounded-lg text-sm sm:text-base font-semibold"
+                  >
+                    <Edit2 className="w-4 h-4" />
+                    Edit Profile
                   </button>
-                  <p className="text-xs text-slate-500 mt-2">JPG, PNG or GIF. Max size 2MB.</p>
+                )}
+              </div>
+
+              {/* Stats */}
+              <div className="space-y-3 sm:space-y-4 pt-4 sm:pt-6 border-t border-border">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-primary/10 rounded-lg">
+                    <BookOpen className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-muted-foreground">Total Courses</p>
+                    <p className="text-sm sm:text-base font-semibold text-foreground">
+                      {instructorStats.totalCourses}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-success/10 rounded-lg">
+                    <GraduationCap className="w-4 h-4 sm:w-5 sm:h-5 text-success" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-muted-foreground">Total Students</p>
+                    <p className="text-sm sm:text-base font-semibold text-foreground">
+                      {instructorStats.totalStudents}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-chart-5/10 rounded-lg">
+                    <Calendar className="w-4 h-4 sm:w-5 sm:h-5 text-chart-5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-muted-foreground">Member Since</p>
+                    <p className="text-sm sm:text-base font-semibold text-foreground">{memberSince}</p>
+                  </div>
                 </div>
               </div>
             </div>
-
-            <div>
-              <label className="flex items-center gap-2 text-sm font-semibold text-slate-900 mb-3">
-                <User className="w-4 h-4 text-blue-600" />
-                Full Name
-              </label>
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="w-full px-4 py-3 border-2 border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-slate-900 placeholder:text-slate-400 transition-all"
-                placeholder="Enter your full name"
-              />
-            </div>
-
-            <div>
-              <label className="flex items-center gap-2 text-sm font-semibold text-slate-900 mb-3">
-                <FileText className="w-4 h-4 text-blue-600" />
-                Bio
-              </label>
-              <textarea
-                value={bio}
-                onChange={(e) => setBio(e.target.value)}
-                className="w-full px-4 py-3 border-2 border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-slate-900 placeholder:text-slate-400 transition-all resize-none"
-                rows="5"
-                placeholder="Tell students about yourself, your expertise, and teaching experience..."
-              />
-              <p className="mt-2 text-xs text-slate-500">
-                Write a brief introduction that will appear on your instructor profile
-              </p>
-            </div>
-
-            <div>
-              <label className="flex items-center gap-2 text-sm font-semibold text-slate-900 mb-3">
-                <Mail className="w-4 h-4 text-slate-400" />
-                Email Address
-              </label>
-              <input
-                type="email"
-                value={session?.user?.email || ""}
-                disabled
-                className="w-full px-4 py-3 border-2 border-slate-200 rounded-xl bg-slate-50 text-slate-500 cursor-not-allowed"
-              />
-              <p className="mt-2 text-xs text-slate-500">Email cannot be changed for security reasons</p>
-            </div>
           </div>
 
-          <div className="px-8 py-6 bg-slate-50 border-t border-slate-200 flex gap-3">
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-blue-600/20 hover:shadow-xl hover:shadow-blue-600/30 font-medium"
-            >
-              {saving ? (
-                <>
-                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  Saving Changes...
-                </>
-              ) : (
-                <>
-                  <Save className="w-4 h-4" />
-                  Save Changes
-                </>
-              )}
-            </button>
-            <button className="px-6 py-3 border-2 border-slate-300 text-slate-700 rounded-xl hover:bg-slate-100 hover:border-slate-400 transition-all font-medium">
-              Cancel
-            </button>
+          {/* Main Content */}
+          <div className="lg:col-span-2">
+            {!isEditing ? (
+              /* View Mode */
+              <div className="space-y-4 sm:space-y-6">
+                {/* Personal Information */}
+                <div className="bg-card rounded-xl border border-border p-4 sm:p-6">
+                  <h3 className="text-lg sm:text-xl font-bold text-foreground mb-4 sm:mb-6 flex items-center gap-2">
+                    <User className="w-5 h-5 text-primary" />
+                    Personal Information
+                  </h3>
+                  <div className="space-y-3 sm:space-y-4">
+                    <div className="flex items-start gap-3">
+                      <Mail className="w-5 h-5 text-muted-foreground mt-0.5 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs text-muted-foreground mb-1">Email</p>
+                        <p className="text-sm sm:text-base text-foreground break-all">{formData.email}</p>
+                      </div>
+                    </div>
+                    {formData.phone && (
+                      <div className="flex items-start gap-3">
+                        <Phone className="w-5 h-5 text-muted-foreground mt-0.5 flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs text-muted-foreground mb-1">Phone</p>
+                          <p className="text-sm sm:text-base text-foreground">{formData.phone}</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Contact Address */}
+                <div className="bg-card rounded-xl border border-border p-4 sm:p-6">
+                  <h3 className="text-lg sm:text-xl font-bold text-foreground mb-4 sm:mb-6 flex items-center gap-2">
+                    <MapPin className="w-5 h-5 text-primary" />
+                    Contact Address
+                  </h3>
+                  {hasCompleteAddress ? (
+                    <div className="space-y-2 sm:space-y-3">
+                      <p className="text-sm sm:text-base text-foreground font-medium">{formData.name}</p>
+                      <p className="text-sm sm:text-base text-foreground">{formData.addressLine1}</p>
+                      {formData.addressLine2 && (
+                        <p className="text-sm sm:text-base text-foreground">{formData.addressLine2}</p>
+                      )}
+                      <p className="text-sm sm:text-base text-foreground">
+                        {formData.city}, {formData.district}
+                      </p>
+                      {formData.postalCode && (
+                        <p className="text-sm sm:text-base text-foreground">
+                          Postal Code: {formData.postalCode}
+                        </p>
+                      )}
+                      <p className="text-sm sm:text-base text-foreground">{formData.country}</p>
+                      {formData.phone && (
+                        <p className="text-sm sm:text-base text-muted-foreground mt-3">
+                          Phone: {formData.phone}
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-center py-6 sm:py-8">
+                      <MapPin className="w-12 h-12 sm:w-16 sm:h-16 text-muted-foreground/30 mx-auto mb-3 sm:mb-4" />
+                      <p className="text-sm sm:text-base text-muted-foreground mb-4">
+                        No contact address added yet
+                      </p>
+                      <p className="text-xs sm:text-sm text-muted-foreground">
+                        Add your address for better communication
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              /* Edit Mode */
+              <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
+                <div className="bg-card rounded-xl border border-border p-4 sm:p-6">
+                  <div className="flex items-center justify-between mb-4 sm:mb-6">
+                    <h3 className="text-lg sm:text-xl font-bold text-foreground">Edit Profile</h3>
+                    <button
+                      type="button"
+                      onClick={handleCancel}
+                      className="btn-secondary inline-flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-sm font-semibold"
+                    >
+                      <X className="w-4 h-4" />
+                      Cancel
+                    </button>
+                  </div>
+
+                  <div className="space-y-4 sm:space-y-6">
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-2">
+                        Profile Picture
+                      </label>
+                      <ImageUpload
+                        onUploadComplete={handleImageUpload}
+                        currentImage={formData.image}
+                        aspectRatio="square"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-2">Full Name</label>
+                      <input
+                        type="text"
+                        name="name"
+                        value={formData.name}
+                        onChange={handleChange}
+                        className="w-full px-4 py-2.5 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary bg-background text-foreground"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-2">Email</label>
+                      <input
+                        type="email"
+                        name="email"
+                        value={formData.email}
+                        disabled
+                        className="w-full px-4 py-2.5 border border-input rounded-lg bg-muted text-muted-foreground cursor-not-allowed"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-2">Phone Number</label>
+                      <input
+                        type="tel"
+                        name="phone"
+                        value={formData.phone}
+                        onChange={handleChange}
+                        placeholder="07XXXXXXXX"
+                        className="w-full px-4 py-2.5 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary bg-background text-foreground"
+                      />
+                    </div>
+
+                    {/* Contact Address Section */}
+                    <div className="pt-4 border-t border-border">
+                      <h4 className="text-base sm:text-lg font-semibold text-foreground mb-2 sm:mb-3">
+                        Contact Address
+                      </h4>
+                      <p className="text-xs sm:text-sm text-muted-foreground mb-4">
+                        This address will be used for communication purposes.
+                      </p>
+
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-sm font-medium text-foreground mb-2">
+                            Address Line 1 *
+                          </label>
+                          <input
+                            type="text"
+                            name="addressLine1"
+                            value={formData.addressLine1}
+                            onChange={handleChange}
+                            placeholder="House number, Street name"
+                            className="w-full px-4 py-2.5 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary bg-background text-foreground"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-foreground mb-2">
+                            Address Line 2
+                          </label>
+                          <input
+                            type="text"
+                            name="addressLine2"
+                            value={formData.addressLine2}
+                            onChange={handleChange}
+                            placeholder="Apartment, suite, landmark (optional)"
+                            className="w-full px-4 py-2.5 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary bg-background text-foreground"
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-foreground mb-2">City *</label>
+                            <input
+                              type="text"
+                              name="city"
+                              value={formData.city}
+                              onChange={handleChange}
+                              placeholder="City"
+                              className="w-full px-4 py-2.5 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary bg-background text-foreground"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-foreground mb-2">
+                              District *
+                            </label>
+                            <select
+                              name="district"
+                              value={formData.district}
+                              onChange={handleChange}
+                              className="w-full px-4 py-2.5 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary bg-background text-foreground"
+                            >
+                              <option value="">Select District</option>
+                              {SRI_LANKAN_DISTRICTS.map((district) => (
+                                <option key={district} value={district}>
+                                  {district}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-foreground mb-2">
+                              Postal Code
+                            </label>
+                            <input
+                              type="text"
+                              name="postalCode"
+                              value={formData.postalCode}
+                              onChange={handleChange}
+                              placeholder="Postal Code"
+                              className="w-full px-4 py-2.5 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary bg-background text-foreground"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-foreground mb-2">Country</label>
+                            <input
+                              type="text"
+                              name="country"
+                              value={formData.country}
+                              disabled
+                              className="w-full px-4 py-2.5 border border-input rounded-lg bg-muted text-muted-foreground cursor-not-allowed"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={saving}
+                      className="btn-primary w-full inline-flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-semibold disabled:opacity-50"
+                    >
+                      {saving ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin"></div>
+                          Saving...
+                        </>
+                      ) : (
+                        <>
+                          <Save className="w-4 h-4" />
+                          Save Changes
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       </div>

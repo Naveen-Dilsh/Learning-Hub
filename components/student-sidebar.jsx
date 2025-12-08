@@ -21,27 +21,33 @@ import {
   X,
   Search,
   Package,
+  Video,
 } from "lucide-react"
 import { ThemeToggle } from "@/components/theme-toggle"
-import { useState, useMemo, useCallback } from "react"
+import { useState, useMemo, useCallback, useEffect } from "react"
 
 export function StudentSidebar() {
   const pathname = usePathname()
   const { sidebarOpen, setSidebarOpen } = useDashboard()
   const { data: session } = useSession()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [deliveryCount, setDeliveryCount] = useState(0)
+  const [hasViewedDeliveries, setHasViewedDeliveries] = useState(false)
+  const [liveSessionCount, setLiveSessionCount] = useState(0)
+  const [hasViewedLiveSessions, setHasViewedLiveSessions] = useState(false)
 
   // Memoize menu items - prevents recreation on every render
   const menuItems = useMemo(() => [
     { href: "/student", label: "Dashboard", icon: Home, gradient: "from-primary to-accent" },
     { href: "/student/courses", label: "My Courses", icon: BookOpen, gradient: "from-accent to-primary" },
     { href: "/student/browse-course", label: "Browse Courses", icon: Search, gradient: "from-primary to-secondary" },
-    { href: "/student/payments", label: "Payments", icon: CreditCard, gradient: "from-secondary to-accent" },
-    { href: "/student/deliveries", label: "Deliveries", icon: Package, gradient: "from-accent to-primary" },
+    { href: "/student/live-sessions", label: "Live Sessions", icon: Video, gradient: "from-primary to-accent" },
     { href: "/student/certificates", label: "Certificates", icon: Award, gradient: "from-accent to-secondary" },
+    { href: "/student/deliveries", label: "Deliveries", icon: Package, gradient: "from-accent to-primary" },
     { href: "/student/leaderboard", label: "Leaderboard", icon: Trophy, gradient: "from-primary to-accent" },
-    { href: "/student/wishlist", label: "Wishlist", icon: Heart, gradient: "from-accent to-primary" },
-    { href: "/student/notifications", label: "Notifications", icon: Bell, gradient: "from-primary to-secondary" },
+    { href: "/student/payments", label: "Payments", icon: CreditCard, gradient: "from-secondary to-accent" },
+    // { href: "/student/wishlist", label: "Wishlist", icon: Heart, gradient: "from-accent to-primary" },
+    // { href: "/student/notifications", label: "Notifications", icon: Bell, gradient: "from-primary to-secondary" },
     { href: "/student/settings", label: "Settings", icon: Settings, gradient: "from-muted-foreground to-foreground" },
     { href: "/student/help", label: "Help", icon: HelpCircle, gradient: "from-secondary to-accent" },
   ], [])
@@ -56,6 +62,113 @@ export function StudentSidebar() {
     setSidebarOpen(!sidebarOpen)
   }, [setSidebarOpen, sidebarOpen])
   const handleLogout = useCallback(() => signOut({ callbackUrl: "/" }), [])
+
+  // Fetch delivery count
+  useEffect(() => {
+    if (!session?.user?.id) return
+
+    const fetchDeliveryCount = async () => {
+      try {
+        const res = await fetch("/api/student/deliveries", {
+          cache: "no-store",
+        })
+        if (res.ok) {
+          const data = await res.json()
+          const deliveries = Array.isArray(data) ? data : []
+          // Count non-delivered deliveries (PENDING, PROCESSING, SHIPPED)
+          const activeDeliveries = deliveries.filter(
+            (d) => d.status !== "DELIVERED" && d.status !== "CANCELLED"
+          )
+          setDeliveryCount(activeDeliveries.length)
+        }
+      } catch (error) {
+        console.error("Error fetching delivery count:", error)
+      }
+    }
+
+    fetchDeliveryCount()
+    // Refresh count every 30 seconds
+    const interval = setInterval(fetchDeliveryCount, 30000)
+    return () => clearInterval(interval)
+  }, [session?.user?.id])
+
+  // Check if user has viewed deliveries page
+  useEffect(() => {
+    if (typeof window === "undefined") return
+
+    const viewed = localStorage.getItem("deliveries-viewed")
+    setHasViewedDeliveries(viewed === "true")
+
+    // Mark as viewed when on deliveries page
+    if (pathname === "/student/deliveries") {
+      localStorage.setItem("deliveries-viewed", "true")
+      setHasViewedDeliveries(true)
+      setDeliveryCount(0) // Clear count when viewing
+    }
+  }, [pathname])
+
+  // Fetch live session count
+  useEffect(() => {
+    if (!session?.user?.id) return
+
+    const fetchLiveSessionCount = async () => {
+      try {
+        const res = await fetch("/api/student/live-sessions", {
+          cache: "no-store",
+        })
+        if (res.ok) {
+          const data = await res.json()
+          const sessions = Array.isArray(data.liveSessions) ? data.liveSessions : []
+          // Count upcoming and live sessions
+          const now = new Date()
+          const activeSessions = sessions.filter((s) => {
+            const scheduledAt = new Date(s.scheduledAt)
+            const endTime = new Date(scheduledAt.getTime() + (s.duration || 60) * 60000)
+            return (
+              (s.status === "LIVE" || s.status === "SCHEDULED") &&
+              now <= endTime &&
+              scheduledAt >= new Date(now.getTime() - 24 * 60 * 60 * 1000) // Only show sessions from last 24 hours
+            )
+          })
+          setLiveSessionCount(activeSessions.length)
+        }
+      } catch (error) {
+        console.error("Error fetching live session count:", error)
+      }
+    }
+
+    fetchLiveSessionCount()
+    // Refresh count every 30 seconds
+    const interval = setInterval(fetchLiveSessionCount, 30000)
+    return () => clearInterval(interval)
+  }, [session?.user?.id])
+
+  // Check if user has viewed live sessions page
+  useEffect(() => {
+    if (typeof window === "undefined") return
+
+    const viewed = localStorage.getItem("live-sessions-viewed")
+    setHasViewedLiveSessions(viewed === "true")
+
+    // Mark as viewed when on live sessions page
+    if (pathname === "/student/live-sessions") {
+      localStorage.setItem("live-sessions-viewed", "true")
+      setHasViewedLiveSessions(true)
+      setLiveSessionCount(0) // Clear count when viewing
+    }
+  }, [pathname])
+
+  // Calculate badge count for deliveries (only show if not viewed and count > 0)
+  const deliveryBadgeCount = useMemo(() => {
+    if (hasViewedDeliveries || deliveryCount === 0) return 0
+    return deliveryCount
+  }, [hasViewedDeliveries, deliveryCount])
+
+  // Calculate badge count for live sessions (only show if not viewed and count > 0)
+  const liveSessionBadgeCount = useMemo(() => {
+    if (hasViewedLiveSessions || liveSessionCount === 0) return 0
+    return liveSessionCount
+  }, [hasViewedLiveSessions, liveSessionCount])
 
   return (
     <>
@@ -108,12 +221,24 @@ export function StudentSidebar() {
                       ></div>
                     )}
 
-                    <div
-                      className={`w-10 h-10 rounded-lg flex items-center justify-center transition-all duration-200 ${
-                        active ? `bg-gradient-to-br ${item.gradient} shadow-lg` : "bg-muted group-hover:bg-accent/20"
-                      }`}
-                    >
-                      <Icon className={`w-5 h-5 ${active ? "text-primary-foreground" : "text-foreground"}`} />
+                    <div className="relative">
+                      <div
+                        className={`w-10 h-10 rounded-lg flex items-center justify-center transition-all duration-200 ${
+                          active ? `bg-gradient-to-br ${item.gradient} shadow-lg` : "bg-muted group-hover:bg-accent/20"
+                        }`}
+                      >
+                        <Icon className={`w-5 h-5 ${active ? "text-primary-foreground" : "text-foreground"}`} />
+                      </div>
+                      {(item.href === "/student/deliveries" && deliveryBadgeCount > 0) && (
+                        <span className="absolute -top-1 -right-1 w-5 h-5 bg-destructive text-primary-foreground text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-card shadow-lg animate-pulse">
+                          {deliveryBadgeCount > 9 ? "9+" : deliveryBadgeCount}
+                        </span>
+                      )}
+                      {(item.href === "/student/live-sessions" && liveSessionBadgeCount > 0) && (
+                        <span className="absolute -top-1 -right-1 w-5 h-5 bg-destructive text-primary-foreground text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-card shadow-lg animate-pulse">
+                          {liveSessionBadgeCount > 9 ? "9+" : liveSessionBadgeCount}
+                        </span>
+                      )}
                     </div>
 
                     <span
@@ -221,22 +346,48 @@ export function StudentSidebar() {
                     ></div>
                   )}
 
-                  <div
-                    className={`w-10 h-10 rounded-lg flex items-center justify-center transition-all duration-200 ${
-                      active ? `bg-gradient-to-br ${item.gradient} shadow-lg` : "bg-muted group-hover:bg-accent/20"
-                    }`}
-                  >
-                    <Icon className={`w-5 h-5 ${active ? "text-primary-foreground" : "text-foreground"}`} />
+                  <div className="relative">
+                    <div className="relative">
+                      <div
+                        className={`w-10 h-10 rounded-lg flex items-center justify-center transition-all duration-200 ${
+                          active ? `bg-gradient-to-br ${item.gradient} shadow-lg` : "bg-muted group-hover:bg-accent/20"
+                        }`}
+                      >
+                        <Icon className={`w-5 h-5 ${active ? "text-primary-foreground" : "text-foreground"}`} />
+                      </div>
+                      {(item.href === "/student/deliveries" && deliveryBadgeCount > 0) && (
+                        <span className="absolute -top-1 -right-1 w-5 h-5 bg-destructive text-primary-foreground text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-card shadow-lg animate-pulse">
+                          {deliveryBadgeCount > 9 ? "9+" : deliveryBadgeCount}
+                        </span>
+                      )}
+                      {(item.href === "/student/live-sessions" && liveSessionBadgeCount > 0) && (
+                        <span className="absolute -top-1 -right-1 w-5 h-5 bg-destructive text-primary-foreground text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-card shadow-lg animate-pulse">
+                          {liveSessionBadgeCount > 9 ? "9+" : liveSessionBadgeCount}
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   {sidebarOpen && (
-                    <span
-                      className={`font-semibold text-sm ${
-                        active ? `bg-gradient-to-r ${item.gradient} bg-clip-text text-transparent` : "text-foreground"
-                      }`}
-                    >
-                      {item.label}
-                    </span>
+                    <div className="flex-1 flex items-center justify-between min-w-0">
+                      <span
+                        className={`font-semibold text-sm ${
+                          active ? `bg-gradient-to-r ${item.gradient} bg-clip-text text-transparent` : "text-foreground"
+                        }`}
+                      >
+                        {item.label}
+                      </span>
+                      {(item.href === "/student/deliveries" && deliveryBadgeCount > 0) && (
+                        <span className="ml-2 w-5 h-5 bg-destructive text-primary-foreground text-[10px] font-bold rounded-full flex items-center justify-center flex-shrink-0">
+                          {deliveryBadgeCount > 9 ? "9+" : deliveryBadgeCount}
+                        </span>
+                      )}
+                      {(item.href === "/student/live-sessions" && liveSessionBadgeCount > 0) && (
+                        <span className="ml-2 w-5 h-5 bg-destructive text-primary-foreground text-[10px] font-bold rounded-full flex items-center justify-center flex-shrink-0">
+                          {liveSessionBadgeCount > 9 ? "9+" : liveSessionBadgeCount}
+                        </span>
+                      )}
+                    </div>
                   )}
 
                   {!active && (

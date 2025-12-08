@@ -19,30 +19,42 @@ import {
   Menu,
   X,
   UserCheck,
+  Package,
 } from "lucide-react"
 import { ThemeToggle } from "@/components/theme-toggle"
-import { useState } from "react"
+import { useState, useEffect, useMemo } from "react"
 
 export function InstructorSidebar() {
   const pathname = usePathname()
   const { sidebarOpen, setSidebarOpen } = useDashboard()
   const { data: session } = useSession()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [enrollmentCount, setEnrollmentCount] = useState(0)
+  const [deliveryCount, setDeliveryCount] = useState(0)
+  const [hasViewedEnrollments, setHasViewedEnrollments] = useState(false)
+  const [hasViewedDeliveries, setHasViewedDeliveries] = useState(false)
 
   const menuItems = [
     { href: "/instructor/dashboard", label: "Dashboard", icon: LayoutDashboard, gradient: "from-primary to-accent" },
     { href: "/instructor/courses", label: "My Courses", icon: BookOpen, gradient: "from-accent to-primary" },
     { href: "/instructor/upload-videos", label: "Upload Videos", icon: Upload, gradient: "from-primary to-secondary" },
-    { href: "/instructor/earnings", label: "Earnings", icon: DollarSign, gradient: "from-secondary to-accent" },
-    { href: "/instructor/students", label: "Students", icon: Users, gradient: "from-accent to-secondary" },
-    { href: "/instructor/analytics", label: "Analytics", icon: BarChart3, gradient: "from-primary to-accent" },
-    { href: "/instructor/messages", label: "Messages", icon: MessageSquare, gradient: "from-secondary to-primary" },
     {
       href: "/instructor/enrollments/pending",
       label: "Enrollments",
       icon: UserCheck,
       gradient: "from-accent to-primary",
     },
+    {
+      href: "/instructor/deliveries",
+      label: "Deliveries",
+      icon: Package,
+      gradient: "from-primary to-secondary",
+    },
+    // { href: "/instructor/earnings", label: "Earnings", icon: DollarSign, gradient: "from-secondary to-accent" },
+    { href: "/instructor/students", label: "Students", icon: Users, gradient: "from-accent to-secondary" },
+    { href: "/instructor/analytics", label: "Analytics", icon: BarChart3, gradient: "from-primary to-accent" },
+    // { href: "/instructor/messages", label: "Messages", icon: MessageSquare, gradient: "from-secondary to-primary" },
+    
     {
       href: "/instructor/profile",
       label: "Profile Settings",
@@ -52,6 +64,101 @@ export function InstructorSidebar() {
   ]
 
   const isActive = (href) => pathname === href
+
+  // Fetch enrollment count
+  useEffect(() => {
+    if (!session?.user?.id) return
+
+    const fetchEnrollmentCount = async () => {
+      try {
+        const res = await fetch("/api/instructor/enrollments/pending", {
+          cache: "no-store",
+        })
+        if (res.ok) {
+          const data = await res.json()
+          const enrollments = Array.isArray(data.enrollments) ? data.enrollments : []
+          setEnrollmentCount(enrollments.length)
+        }
+      } catch (error) {
+        console.error("Error fetching enrollment count:", error)
+      }
+    }
+
+    fetchEnrollmentCount()
+    // Refresh count every 30 seconds
+    const interval = setInterval(fetchEnrollmentCount, 30000)
+    return () => clearInterval(interval)
+  }, [session?.user?.id])
+
+  // Fetch delivery count
+  useEffect(() => {
+    if (!session?.user?.id) return
+
+    const fetchDeliveryCount = async () => {
+      try {
+        const res = await fetch("/api/instructor/deliveries", {
+          cache: "no-store",
+        })
+        if (res.ok) {
+          const data = await res.json()
+          const deliveries = Array.isArray(data.deliveries) ? data.deliveries : []
+          // Count pending and processing deliveries
+          const activeDeliveries = deliveries.filter(
+            (d) => d.status === "PENDING" || d.status === "PROCESSING"
+          )
+          setDeliveryCount(activeDeliveries.length)
+        }
+      } catch (error) {
+        console.error("Error fetching delivery count:", error)
+      }
+    }
+
+    fetchDeliveryCount()
+    // Refresh count every 30 seconds
+    const interval = setInterval(fetchDeliveryCount, 30000)
+    return () => clearInterval(interval)
+  }, [session?.user?.id])
+
+  // Check if user has viewed enrollments page
+  useEffect(() => {
+    if (typeof window === "undefined") return
+
+    const viewed = localStorage.getItem("instructor-enrollments-viewed")
+    setHasViewedEnrollments(viewed === "true")
+
+    // Mark as viewed when on enrollments page
+    if (pathname === "/instructor/enrollments/pending") {
+      localStorage.setItem("instructor-enrollments-viewed", "true")
+      setHasViewedEnrollments(true)
+      setEnrollmentCount(0) // Clear count when viewing
+    }
+  }, [pathname])
+
+  // Check if user has viewed deliveries page
+  useEffect(() => {
+    if (typeof window === "undefined") return
+
+    const viewed = localStorage.getItem("instructor-deliveries-viewed")
+    setHasViewedDeliveries(viewed === "true")
+
+    // Mark as viewed when on deliveries page
+    if (pathname === "/instructor/deliveries") {
+      localStorage.setItem("instructor-deliveries-viewed", "true")
+      setHasViewedDeliveries(true)
+      setDeliveryCount(0) // Clear count when viewing
+    }
+  }, [pathname])
+
+  // Calculate badge counts (only show if not viewed and count > 0)
+  const enrollmentBadgeCount = useMemo(() => {
+    if (hasViewedEnrollments || enrollmentCount === 0) return 0
+    return enrollmentCount
+  }, [hasViewedEnrollments, enrollmentCount])
+
+  const deliveryBadgeCount = useMemo(() => {
+    if (hasViewedDeliveries || deliveryCount === 0) return 0
+    return deliveryCount
+  }, [hasViewedDeliveries, deliveryCount])
 
   return (
     <>
@@ -103,12 +210,24 @@ export function InstructorSidebar() {
                       ></div>
                     )}
 
-                    <div
-                      className={`w-10 h-10 rounded-lg flex items-center justify-center transition-all duration-200 ${
-                        active ? `bg-gradient-to-br ${item.gradient} shadow-lg` : "bg-muted group-hover:bg-accent/20"
-                      }`}
-                    >
-                      <Icon className={`w-5 h-5 ${active ? "text-primary-foreground" : "text-foreground"}`} />
+                    <div className="relative">
+                      <div
+                        className={`w-10 h-10 rounded-lg flex items-center justify-center transition-all duration-200 ${
+                          active ? `bg-gradient-to-br ${item.gradient} shadow-lg` : "bg-muted group-hover:bg-accent/20"
+                        }`}
+                      >
+                        <Icon className={`w-5 h-5 ${active ? "text-primary-foreground" : "text-foreground"}`} />
+                      </div>
+                      {(item.href === "/instructor/enrollments/pending" && enrollmentBadgeCount > 0) && (
+                        <span className="absolute -top-1 -right-1 w-5 h-5 bg-destructive text-primary-foreground text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-card shadow-lg animate-pulse">
+                          {enrollmentBadgeCount > 9 ? "9+" : enrollmentBadgeCount}
+                        </span>
+                      )}
+                      {(item.href === "/instructor/deliveries" && deliveryBadgeCount > 0) && (
+                        <span className="absolute -top-1 -right-1 w-5 h-5 bg-destructive text-primary-foreground text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-card shadow-lg animate-pulse">
+                          {deliveryBadgeCount > 9 ? "9+" : deliveryBadgeCount}
+                        </span>
+                      )}
                     </div>
 
                     <span
@@ -152,11 +271,11 @@ export function InstructorSidebar() {
 
       {/* Desktop Sidebar */}
       <aside
-        className={`hidden lg:block ${
+        className={`hidden lg:block fixed left-0 top-0 ${
           sidebarOpen ? "w-72" : "w-20"
-        } bg-card border-r border-border min-h-screen sticky top-0 transition-all duration-300 shadow-lg`}
+        } bg-card border-r border-border h-screen transition-all duration-300 shadow-lg z-40`}
       >
-        <div className="flex flex-col h-screen">
+        <div className="flex flex-col h-full">
           {/* Header Section */}
           <div className="p-6 border-b border-border">
             <div className="flex items-center justify-between mb-4">
@@ -208,22 +327,46 @@ export function InstructorSidebar() {
                     ></div>
                   )}
 
-                  <div
-                    className={`w-10 h-10 rounded-lg flex items-center justify-center transition-all duration-200 ${
-                      active ? `bg-gradient-to-br ${item.gradient} shadow-lg` : "bg-muted group-hover:bg-accent/20"
-                    }`}
-                  >
-                    <Icon className={`w-5 h-5 ${active ? "text-primary-foreground" : "text-foreground"}`} />
+                  <div className="relative">
+                    <div
+                      className={`w-10 h-10 rounded-lg flex items-center justify-center transition-all duration-200 ${
+                        active ? `bg-gradient-to-br ${item.gradient} shadow-lg` : "bg-muted group-hover:bg-accent/20"
+                      }`}
+                    >
+                      <Icon className={`w-5 h-5 ${active ? "text-primary-foreground" : "text-foreground"}`} />
+                    </div>
+                    {(item.href === "/instructor/enrollments/pending" && enrollmentBadgeCount > 0) && (
+                      <span className="absolute -top-1 -right-1 w-5 h-5 bg-destructive text-primary-foreground text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-card shadow-lg animate-pulse">
+                        {enrollmentBadgeCount > 9 ? "9+" : enrollmentBadgeCount}
+                      </span>
+                    )}
+                    {(item.href === "/instructor/deliveries" && deliveryBadgeCount > 0) && (
+                      <span className="absolute -top-1 -right-1 w-5 h-5 bg-destructive text-primary-foreground text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-card shadow-lg animate-pulse">
+                        {deliveryBadgeCount > 9 ? "9+" : deliveryBadgeCount}
+                      </span>
+                    )}
                   </div>
 
                   {sidebarOpen && (
-                    <span
-                      className={`font-semibold text-sm ${
-                        active ? `bg-gradient-to-r ${item.gradient} bg-clip-text text-transparent` : "text-foreground"
-                      }`}
-                    >
-                      {item.label}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`font-semibold text-sm ${
+                          active ? `bg-gradient-to-r ${item.gradient} bg-clip-text text-transparent` : "text-foreground"
+                        }`}
+                      >
+                        {item.label}
+                      </span>
+                      {(item.href === "/instructor/enrollments/pending" && enrollmentBadgeCount > 0) && (
+                        <span className="w-5 h-5 bg-destructive text-primary-foreground text-[10px] font-bold rounded-full flex items-center justify-center flex-shrink-0">
+                          {enrollmentBadgeCount > 9 ? "9+" : enrollmentBadgeCount}
+                        </span>
+                      )}
+                      {(item.href === "/instructor/deliveries" && deliveryBadgeCount > 0) && (
+                        <span className="w-5 h-5 bg-destructive text-primary-foreground text-[10px] font-bold rounded-full flex items-center justify-center flex-shrink-0">
+                          {deliveryBadgeCount > 9 ? "9+" : deliveryBadgeCount}
+                        </span>
+                      )}
+                    </div>
                   )}
 
                   {!active && (
