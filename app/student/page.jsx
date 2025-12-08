@@ -136,7 +136,7 @@ export default function StudentDashboard() {
             <p className="text-foreground font-medium mb-2 text-sm sm:text-base">No courses yet</p>
             <p className="text-muted-foreground mb-4 text-xs sm:text-sm">Start learning by enrolling in courses</p>
             <Link
-              href="/courses"
+              href="/student/browse-course"
               className="btn-primary inline-block px-4 sm:px-6 py-2 rounded-lg text-sm sm:text-base active:scale-[0.98]"
             >
               Browse Courses

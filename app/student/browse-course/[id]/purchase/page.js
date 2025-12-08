@@ -1,8 +1,9 @@
 "use client"
 
-import { useEffect, useState, useCallback, useMemo } from "react"
+import { useState, useMemo, useCallback } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { useSession } from "next-auth/react"
+import { useQuery } from "@tanstack/react-query"
 import { useCartStore } from "@/lib/stores"
 import { useToast } from "@/hooks/use-toast"
 import Link from "next/link"
@@ -12,46 +13,35 @@ import { ShoppingCart, CreditCard, ArrowLeft, Lock, MapPin, Package, CheckCircle
 export default function PurchaseCourse() {
   const params = useParams()
   const router = useRouter()
-  const { data: session, status } = useSession()
+  const { data: session, status: authStatus } = useSession()
   const { addToCart } = useCartStore()
   const { toast } = useToast()
-  const [course, setCourse] = useState(null)
-  const [loading, setLoading] = useState(true)
   const [processing, setProcessing] = useState(false)
   const [requiresDelivery, setRequiresDelivery] = useState(false)
-  const [userProfile, setUserProfile] = useState(null)
-  const [hasAddress, setHasAddress] = useState(false)
 
-  // Memoized computed values
-  const isPaymentDisabled = useMemo(() => 
-    processing || (requiresDelivery && !hasAddress), 
-    [processing, requiresDelivery, hasAddress]
-  )
-
-  useEffect(() => {
-    if (status === "unauthenticated") {
-      router.push("/auth/signin")
-    }
-  }, [status, router])
-
-  const fetchCourse = useCallback(async () => {
-    try {
+  // Fetch course details
+  const {
+    data: course,
+    isLoading: courseLoading,
+    isError: courseError,
+    error: courseErrorObj,
+  } = useQuery({
+    queryKey: ["course", params.id],
+    queryFn: async () => {
       const res = await fetch(`/api/courses/${params.id}`, {
-        next: { revalidate: 60 }
+        cache: "no-store",
       })
+      
       if (!res.ok) {
         let errorMessage = "Failed to fetch course"
-        let errorTitle = "Error Loading Course"
         
         try {
           const errorData = await res.json()
           errorMessage = errorData.message || errorData.error || `Error ${res.status}: ${res.statusText}`
           
           if (res.status === 404) {
-            errorTitle = "Course Not Found"
             errorMessage = errorData.message || "The course you're looking for doesn't exist"
           } else if (res.status === 401) {
-            errorTitle = "Authentication Required"
             errorMessage = "Please sign in to view this course"
           }
         } catch (parseError) {
@@ -60,41 +50,58 @@ export default function PurchaseCourse() {
         
         throw new Error(errorMessage)
       }
-      const data = await res.json()
-      setCourse(data)
-    } catch (err) {
-      const errorMessage = err.message || "Failed to load course. Please try again."
+      
+      return await res.json()
+    },
+    enabled: !!params.id,
+    staleTime: 30 * 1000, // 30 seconds
+    onError: (error) => {
       toast({
         variant: "destructive",
         title: "Error Loading Course",
-        description: errorMessage,
+        description: error.message || "Failed to load course. Please try again.",
       })
-    } finally {
-      setLoading(false)
-    }
-  }, [params.id, toast])
+    },
+  })
 
-  const fetchUserProfile = useCallback(async () => {
-    try {
-      const res = await fetch("/api/user/profile")
-      if (res.ok) {
-        const data = await res.json()
-        setUserProfile(data)
-        setHasAddress(Boolean(data.phone && data.addressLine1 && data.city && data.district))
-      }
-    } catch (error) {
-      console.error("Error fetching profile:", error)
-    }
-  }, [])
+  // Fetch user profile
+  const {
+    data: userProfile,
+    isLoading: profileLoading,
+  } = useQuery({
+    queryKey: ["userProfile", session?.user?.id],
+    queryFn: async () => {
+      const res = await fetch("/api/user/profile", {
+        cache: "no-store",
+      })
+      if (!res.ok) return null
+      return await res.json()
+    },
+    enabled: !!session?.user?.id,
+    staleTime: 30 * 1000, // 30 seconds
+  })
 
-  useEffect(() => {
-    if (params.id) {
-      fetchCourse()
-    }
-    if (session?.user) {
-      fetchUserProfile()
-    }
-  }, [params.id, session, fetchCourse, fetchUserProfile])
+  const hasAddress = useMemo(
+    () => Boolean(
+      userProfile?.phone?.trim() &&
+      userProfile?.addressLine1?.trim() && 
+      userProfile?.city?.trim() && 
+      userProfile?.district?.trim()
+    ),
+    [userProfile?.phone, userProfile?.addressLine1, userProfile?.city, userProfile?.district]
+  )
+
+  // Memoized computed values
+  const isPaymentDisabled = useMemo(() => 
+    processing || (requiresDelivery && !hasAddress), 
+    [processing, requiresDelivery, hasAddress]
+  )
+
+  // Redirect if unauthenticated
+  if (authStatus === "unauthenticated") {
+    router.push("/auth/signin")
+    return null
+  }
 
   const handlePurchase = useCallback(async () => {
     if (requiresDelivery && !hasAddress) {
@@ -202,7 +209,9 @@ export default function PurchaseCourse() {
     }
   }, [requiresDelivery, hasAddress, params.id, course, addToCart, toast])
 
-  if (status === "loading" || loading) {
+  const isLoading = courseLoading || profileLoading || authStatus === "loading"
+
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background">
         <LoadingBubbles/>
@@ -366,9 +375,31 @@ export default function PurchaseCourse() {
                         Delivery Address
                       </div>
                       <p className="text-xs sm:text-sm text-foreground leading-relaxed pl-6">
-                        {userProfile?.addressLine1}, {userProfile?.city}, {userProfile?.district}
+                        {userProfile?.name && <span className="font-semibold">{userProfile.name}</span>}
+                        {userProfile?.name && <br />}
+                        {userProfile?.addressLine1}
+                        {userProfile?.addressLine2 && (
+                          <>
+                            <br />
+                            {userProfile.addressLine2}
+                          </>
+                        )}
                         <br />
-                        Phone: {userProfile?.phone}
+                        {userProfile?.city}, {userProfile?.district}
+                        {userProfile?.postalCode && (
+                          <>
+                            <br />
+                            Postal Code: {userProfile.postalCode}
+                          </>
+                        )}
+                        <br />
+                        {userProfile?.country}
+                        {userProfile?.phone && (
+                          <>
+                            <br />
+                            <span className="text-muted-foreground">Phone: {userProfile.phone}</span>
+                          </>
+                        )}
                       </p>
                       <Link 
                         href="/student/settings" 

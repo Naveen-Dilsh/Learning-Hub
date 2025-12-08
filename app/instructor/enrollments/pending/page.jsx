@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useMemo, memo } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { useToast } from "@/hooks/use-toast"
 import Image from "next/image"
 import LoadingBubbles from "@/components/loadingBubbles"
@@ -158,8 +159,7 @@ export default function PendingEnrollments() {
   const { data: session, status: authStatus } = useSession()
   const router = useRouter()
   const { toast } = useToast()
-  const [enrollments, setEnrollments] = useState([])
-  const [loading, setLoading] = useState(true)
+  const queryClient = useQueryClient()
   const [processing, setProcessing] = useState(null)
   const [confirmModal, setConfirmModal] = useState(null) // { type: 'approve' | 'reject', enrollmentId: string }
 
@@ -171,35 +171,45 @@ export default function PendingEnrollments() {
     }
   }, [authStatus, session, router])
 
-  useEffect(() => {
-    if (session?.user?.id) {
-      fetchPendingEnrollments()
-    }
-  }, [session])
-
-  const fetchPendingEnrollments = useCallback(async () => {
-    try {
-      setLoading(true)
+  const {
+    data: enrollmentsData,
+    isLoading,
+    isError,
+    error,
+  } = useQuery({
+    queryKey: ["pendingEnrollments", session?.user?.id],
+    queryFn: async () => {
+      if (!session?.user?.id) return { enrollments: [] }
+      
       const res = await fetch("/api/instructor/enrollments/pending", {
         cache: "no-store",
       })
+      
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}))
         throw new Error(errorData.message || "Failed to fetch enrollments")
       }
-      const data = await res.json()
-      setEnrollments(data.enrollments || [])
-    } catch (error) {
-      console.error("Error fetching enrollments:", error)
+      
+      return await res.json()
+    },
+    enabled: !!session?.user?.id,
+    staleTime: 30 * 1000, // 30 seconds
+    onError: (error) => {
       toast({
         title: "Error",
         description: error.message || "Failed to load pending enrollments",
         variant: "destructive",
       })
-    } finally {
-      setLoading(false)
-    }
-  }, [toast])
+    },
+    onSuccess: () => {
+      // Mark enrollments as viewed when data loads successfully
+      if (typeof window !== "undefined") {
+        localStorage.setItem("instructor-enrollments-viewed", "true")
+      }
+    },
+  })
+
+  const enrollments = useMemo(() => enrollmentsData?.enrollments || [], [enrollmentsData])
 
   const handleApproveClick = useCallback((enrollmentId) => {
     setConfirmModal({ type: "approve", enrollmentId })
@@ -209,46 +219,86 @@ export default function PendingEnrollments() {
     setConfirmModal({ type: "reject", enrollmentId })
   }, [])
 
-  const handleConfirm = useCallback(async () => {
-    if (!confirmModal) return
-
-    const { type, enrollmentId } = confirmModal
-    setConfirmModal(null)
-    setProcessing(enrollmentId)
-
-    try {
-      const endpoint =
-        type === "approve"
-          ? `/api/instructor/enrollments/${enrollmentId}/approve`
-          : `/api/instructor/enrollments/${enrollmentId}/reject`
-      const method = type === "approve" ? "POST" : "DELETE"
-
-      const res = await fetch(endpoint, { method })
+  const approveEnrollmentMutation = useMutation({
+    mutationFn: async (enrollmentId) => {
+      const res = await fetch(`/api/instructor/enrollments/${enrollmentId}/approve`, {
+        method: "POST",
+      })
 
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}))
-        throw new Error(errorData.message || `Failed to ${type} enrollment`)
+        throw new Error(errorData.message || "Failed to approve enrollment")
       }
 
-      setEnrollments((prev) => prev.filter((e) => e.id !== enrollmentId))
+      return await res.json()
+    },
+    onSuccess: () => {
+      // Invalidate and refetch pending enrollments
+      queryClient.invalidateQueries({ queryKey: ["pendingEnrollments", session?.user?.id] })
+      
       toast({
         title: "Success",
-        description:
-          type === "approve"
-            ? "Enrollment approved successfully!"
-            : "Enrollment request rejected",
+        description: "Enrollment approved successfully!",
       })
-    } catch (error) {
-      console.error("Error:", error)
+      setConfirmModal(null)
+      setProcessing(null)
+    },
+    onError: (error) => {
       toast({
         title: "Error",
-        description: error.message || `Failed to ${type} enrollment`,
+        description: error.message || "Failed to approve enrollment",
         variant: "destructive",
       })
-    } finally {
       setProcessing(null)
+    },
+  })
+
+  const rejectEnrollmentMutation = useMutation({
+    mutationFn: async (enrollmentId) => {
+      const res = await fetch(`/api/instructor/enrollments/${enrollmentId}/reject`, {
+        method: "DELETE",
+      })
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}))
+        throw new Error(errorData.message || "Failed to reject enrollment")
+      }
+
+      return await res.json()
+    },
+    onSuccess: () => {
+      // Invalidate and refetch pending enrollments
+      queryClient.invalidateQueries({ queryKey: ["pendingEnrollments", session?.user?.id] })
+      
+      toast({
+        title: "Success",
+        description: "Enrollment request rejected",
+      })
+      setConfirmModal(null)
+      setProcessing(null)
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to reject enrollment",
+        variant: "destructive",
+      })
+      setProcessing(null)
+    },
+  })
+
+  const handleConfirm = useCallback(() => {
+    if (!confirmModal) return
+
+    const { type, enrollmentId } = confirmModal
+    setProcessing(enrollmentId)
+
+    if (type === "approve") {
+      approveEnrollmentMutation.mutate(enrollmentId)
+    } else {
+      rejectEnrollmentMutation.mutate(enrollmentId)
     }
-  }, [confirmModal, toast])
+  }, [confirmModal, approveEnrollmentMutation, rejectEnrollmentMutation])
 
   const handleCancel = useCallback(() => {
     setConfirmModal(null)
@@ -257,7 +307,7 @@ export default function PendingEnrollments() {
 
   const enrollmentCount = useMemo(() => enrollments.length, [enrollments])
 
-  if (authStatus === "loading" || loading) {
+  if (authStatus === "loading" || isLoading || !session?.user?.id) {
     return <LoadingBubbles />
   }
 
@@ -371,14 +421,18 @@ export default function PendingEnrollments() {
                   </button>
                   <button
                     onClick={handleConfirm}
-                    disabled={processing === confirmModal.enrollmentId}
+                    disabled={
+                      processing === confirmModal.enrollmentId &&
+                      (approveEnrollmentMutation.isPending || rejectEnrollmentMutation.isPending)
+                    }
                     className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 sm:py-3 rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] transition-all ${
                       confirmModal.type === "approve"
                         ? "btn-success"
                         : "btn-danger"
                     }`}
                   >
-                    {processing === confirmModal.enrollmentId ? (
+                    {processing === confirmModal.enrollmentId &&
+                    (approveEnrollmentMutation.isPending || rejectEnrollmentMutation.isPending) ? (
                       <>
                         <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
                         <span>Processing...</span>

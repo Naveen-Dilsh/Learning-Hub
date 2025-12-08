@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect, useState, useMemo, useCallback, memo } from "react"
+import { useQuery } from "@tanstack/react-query"
+import { useState, useMemo, useCallback, memo } from "react"
 import { useSession } from "next-auth/react"
 import Link from "next/link"
 import { Search, BookOpen, Users, Video } from "lucide-react"
@@ -74,9 +75,27 @@ CourseCard.displayName = 'CourseCard'
 
 export default function CourseBrowser() {
   const { data: session } = useSession()
-  const [courses, setCourses] = useState([])
-  const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
+
+  const {
+    data: courses = [],
+    isLoading,
+    isError,
+    error,
+  } = useQuery({
+    queryKey: ["courses", "published"],
+    queryFn: async () => {
+      const res = await fetch("/api/courses?published=true", {
+        cache: "no-store",
+      })
+      
+      if (!res.ok) throw new Error("Failed to fetch courses")
+      
+      const data = await res.json()
+      return Array.isArray(data) ? data : []
+    },
+    staleTime: 30 * 1000, // 30 seconds
+  })
 
   // Memoized filtered courses
   const filteredCourses = useMemo(() => {
@@ -88,29 +107,9 @@ export default function CourseBrowser() {
     )
   }, [searchTerm, courses])
 
-  // Memoized fetch function
-  const fetchCourses = useCallback(async () => {
-    try {
-      const res = await fetch("/api/courses?published=true", {
-        next: { revalidate: 120 }, // Cache for 2 minutes
-      })
-      if (!res.ok) throw new Error("Failed to fetch courses")
-      const data = await res.json()
-      setCourses(data)
-    } catch (error) {
-      console.error("Error fetching courses:", error)
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    fetchCourses()
-  }, [fetchCourses])
-
   const clearSearch = useCallback(() => setSearchTerm(""), [])
 
-  if (loading) {
+  if (isLoading) {
     return <LoadingBubbles />
   }
 
@@ -144,6 +143,14 @@ export default function CourseBrowser() {
 
       {/* Courses Grid */}
       <div className="max-w-[1600px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
+        {isError && (
+          <div className="mb-4 p-4 bg-destructive/10 border border-destructive/20 rounded-lg">
+            <p className="text-sm text-destructive">
+              Error loading courses: {error?.message || "Failed to load courses. Please try again."}
+            </p>
+          </div>
+        )}
+        
         {filteredCourses.length === 0 ? (
           <div className="text-center py-12 sm:py-16 bg-card rounded-xl shadow-sm border border-border">
             <div className="w-16 h-16 sm:w-20 sm:h-20 bg-muted rounded-full flex items-center justify-center mx-auto mb-4 sm:mb-6">

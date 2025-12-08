@@ -101,7 +101,7 @@ export async function POST(request) {
       }
     }
 
-    // Use transaction for atomic operations
+    // Use transaction for atomic operations (enrollment and payment only)
     const enrollment = await prisma.$transaction(async (tx) => {
       // Create enrollment
       const newEnrollment = await tx.enrollment.create({
@@ -163,18 +163,28 @@ export async function POST(request) {
         },
       })
 
-      // Create notification for instructor
-      await tx.notification.create({
-        data: {
-          studentId: newEnrollment.course.instructorId,
-          title: "New Manual Enrollment Request",
-          message: `${newEnrollment.student.name} (Student #${newEnrollment.student.studentNumber}) has requested enrollment for "${newEnrollment.course.title}" with payment receipt.${requiresDelivery ? " Delivery address provided." : ""}`,
-          type: "info",
-        },
-      })
-
       return newEnrollment
+    }, {
+      timeout: 10000, // 10 second timeout
     })
+
+    // Create notification for instructor OUTSIDE transaction
+    // This prevents transaction errors from affecting enrollment creation
+    if (course.instructorId && enrollment.student && enrollment.course) {
+      try {
+        await prisma.notification.create({
+          data: {
+            studentId: course.instructorId, // This is the instructor's userId
+            title: "New Manual Enrollment Request",
+            message: `${enrollment.student.name}${enrollment.student.studentNumber ? ` (Student #${enrollment.student.studentNumber})` : ''} has requested enrollment for "${course.title}" with payment receipt.${requiresDelivery ? " Delivery address provided." : ""}`,
+            type: "info",
+          },
+        })
+      } catch (notificationError) {
+        // Log error but don't fail the enrollment
+        console.error("Failed to create notification (non-critical):", notificationError)
+      }
+    }
 
     // Invalidate relevant caches
     revalidatePath("/api/student/enrollments")

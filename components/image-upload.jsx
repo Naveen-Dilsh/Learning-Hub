@@ -135,7 +135,7 @@ export default function ImageUpload({ onUploadComplete, currentImage, aspectRati
         >
           {uploading ? (
             <>
-              {/* <Loader2 className="h-6 w-6 sm:h-8 sm:w-8 text-primary animate-spin" /> */}
+              <Loader2 className="h-6 w-6 sm:h-8 sm:w-8 text-primary animate-spin" />
               <span className="text-xs sm:text-sm text-muted-foreground">Uploading...</span>
             </>
           ) : (

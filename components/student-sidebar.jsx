@@ -24,16 +24,15 @@ import {
   Video,
 } from "lucide-react"
 import { ThemeToggle } from "@/components/theme-toggle"
-import { useState, useMemo, useCallback, useEffect } from "react"
+import { useState, useMemo, useCallback, useEffect, useRef } from "react"
+import { useQuery } from "@tanstack/react-query"
 
 export function StudentSidebar() {
   const pathname = usePathname()
   const { sidebarOpen, setSidebarOpen } = useDashboard()
   const { data: session } = useSession()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  const [deliveryCount, setDeliveryCount] = useState(0)
   const [hasViewedDeliveries, setHasViewedDeliveries] = useState(false)
-  const [liveSessionCount, setLiveSessionCount] = useState(0)
   const [hasViewedLiveSessions, setHasViewedLiveSessions] = useState(false)
 
   // Memoize menu items - prevents recreation on every render
@@ -63,112 +62,186 @@ export function StudentSidebar() {
   }, [setSidebarOpen, sidebarOpen])
   const handleLogout = useCallback(() => signOut({ callbackUrl: "/" }), [])
 
-  // Fetch delivery count
-  useEffect(() => {
-    if (!session?.user?.id) return
-
-    const fetchDeliveryCount = async () => {
-      try {
-        const res = await fetch("/api/student/deliveries", {
-          cache: "no-store",
-        })
-        if (res.ok) {
-          const data = await res.json()
-          const deliveries = Array.isArray(data) ? data : []
-          // Count non-delivered deliveries (PENDING, PROCESSING, SHIPPED)
-          const activeDeliveries = deliveries.filter(
-            (d) => d.status !== "DELIVERED" && d.status !== "CANCELLED"
-          )
-          setDeliveryCount(activeDeliveries.length)
-        }
-      } catch (error) {
-        console.error("Error fetching delivery count:", error)
+  // Fetch delivery count with React Query
+  const { data: deliveryData, isLoading: deliveryLoading } = useQuery({
+    queryKey: ["deliveries", session?.user?.id],
+    queryFn: async () => {
+      if (!session?.user?.id) return []
+      
+      const res = await fetch("/api/student/deliveries", {
+        cache: "no-store",
+      })
+      
+      if (!res.ok) {
+        throw new Error("Failed to fetch deliveries")
       }
-    }
+      
+      const data = await res.json()
+      return Array.isArray(data) ? data : []
+    },
+    enabled: !!session?.user?.id && session?.user?.role === "STUDENT",
+    refetchInterval: 30000, // Refetch every 30 seconds
+    staleTime: 10 * 1000, // Consider data stale after 10 seconds
+    retry: 2,
+  })
 
-    fetchDeliveryCount()
-    // Refresh count every 30 seconds
-    const interval = setInterval(fetchDeliveryCount, 30000)
-    return () => clearInterval(interval)
-  }, [session?.user?.id])
+  // Fetch live session count with React Query
+  const { data: liveSessionData, isLoading: liveSessionLoading } = useQuery({
+    queryKey: ["liveSessions", session?.user?.id],
+    queryFn: async () => {
+      if (!session?.user?.id) return { liveSessions: [] }
+      
+      const res = await fetch("/api/student/live-sessions", {
+        cache: "no-store",
+      })
+      
+      if (!res.ok) {
+        throw new Error("Failed to fetch live sessions")
+      }
+      
+      return await res.json()
+    },
+    enabled: !!session?.user?.id && session?.user?.role === "STUDENT",
+    refetchInterval: 30000, // Refetch every 30 seconds
+    staleTime: 10 * 1000, // Consider data stale after 10 seconds
+    retry: 2,
+  })
+
+  // Calculate counts from React Query data
+  const deliveryCount = useMemo(() => {
+    if (deliveryLoading || !deliveryData) return 0
+    const deliveries = Array.isArray(deliveryData) ? deliveryData : []
+    // Count non-delivered deliveries (PENDING, PROCESSING, SHIPPED)
+    return deliveries.filter(
+      (d) => d.status !== "DELIVERED" && d.status !== "CANCELLED"
+    ).length
+  }, [deliveryData, deliveryLoading])
+
+  const liveSessionCount = useMemo(() => {
+    if (liveSessionLoading || !liveSessionData) return 0
+    const sessions = Array.isArray(liveSessionData?.liveSessions) ? liveSessionData.liveSessions : []
+    // Count upcoming and live sessions
+    const now = new Date()
+    return sessions.filter((s) => {
+      if (!s.scheduledAt) return false
+      const scheduledAt = new Date(s.scheduledAt)
+      const endTime = new Date(scheduledAt.getTime() + (s.duration || 60) * 60000)
+      return (
+        (s.status === "LIVE" || s.status === "SCHEDULED") &&
+        now <= endTime &&
+        scheduledAt >= new Date(now.getTime() - 24 * 60 * 60 * 1000) // Only show sessions from last 24 hours
+      )
+    }).length
+  }, [liveSessionData, liveSessionLoading])
 
   // Check if user has viewed deliveries page
   useEffect(() => {
     if (typeof window === "undefined") return
 
-    const viewed = localStorage.getItem("deliveries-viewed")
-    setHasViewedDeliveries(viewed === "true")
+    const checkViewed = () => {
+      const viewed = localStorage.getItem("deliveries-viewed")
+      setHasViewedDeliveries(viewed === "true")
+    }
+
+    // Check on mount and pathname change
+    checkViewed()
 
     // Mark as viewed when on deliveries page
     if (pathname === "/student/deliveries") {
       localStorage.setItem("deliveries-viewed", "true")
       setHasViewedDeliveries(true)
-      setDeliveryCount(0) // Clear count when viewing
     }
-  }, [pathname])
 
-  // Fetch live session count
-  useEffect(() => {
-    if (!session?.user?.id) return
-
-    const fetchLiveSessionCount = async () => {
-      try {
-        const res = await fetch("/api/student/live-sessions", {
-          cache: "no-store",
-        })
-        if (res.ok) {
-          const data = await res.json()
-          const sessions = Array.isArray(data.liveSessions) ? data.liveSessions : []
-          // Count upcoming and live sessions
-          const now = new Date()
-          const activeSessions = sessions.filter((s) => {
-            const scheduledAt = new Date(s.scheduledAt)
-            const endTime = new Date(scheduledAt.getTime() + (s.duration || 60) * 60000)
-            return (
-              (s.status === "LIVE" || s.status === "SCHEDULED") &&
-              now <= endTime &&
-              scheduledAt >= new Date(now.getTime() - 24 * 60 * 60 * 1000) // Only show sessions from last 24 hours
-            )
-          })
-          setLiveSessionCount(activeSessions.length)
-        }
-      } catch (error) {
-        console.error("Error fetching live session count:", error)
+    // Listen for storage changes (when page sets it)
+    const handleStorageChange = (e) => {
+      if (e.key === "deliveries-viewed") {
+        setHasViewedDeliveries(e.newValue === "true")
       }
     }
 
-    fetchLiveSessionCount()
-    // Refresh count every 30 seconds
-    const interval = setInterval(fetchLiveSessionCount, 30000)
-    return () => clearInterval(interval)
-  }, [session?.user?.id])
+    window.addEventListener("storage", handleStorageChange)
+    // Also check periodically in case localStorage was set by same window
+    // Note: storage event only fires across tabs, so we poll for same-window changes
+    const interval = setInterval(checkViewed, 500)
+
+    return () => {
+      window.removeEventListener("storage", handleStorageChange)
+      clearInterval(interval)
+    }
+  }, [pathname])
 
   // Check if user has viewed live sessions page
   useEffect(() => {
     if (typeof window === "undefined") return
 
-    const viewed = localStorage.getItem("live-sessions-viewed")
-    setHasViewedLiveSessions(viewed === "true")
+    const checkViewed = () => {
+      const viewed = localStorage.getItem("live-sessions-viewed")
+      setHasViewedLiveSessions(viewed === "true")
+    }
+
+    // Check on mount and pathname change
+    checkViewed()
 
     // Mark as viewed when on live sessions page
     if (pathname === "/student/live-sessions") {
       localStorage.setItem("live-sessions-viewed", "true")
       setHasViewedLiveSessions(true)
-      setLiveSessionCount(0) // Clear count when viewing
+    }
+
+    // Listen for storage changes (when page sets it)
+    const handleStorageChange = (e) => {
+      if (e.key === "live-sessions-viewed") {
+        setHasViewedLiveSessions(e.newValue === "true")
+      }
+    }
+
+    window.addEventListener("storage", handleStorageChange)
+    // Also check periodically in case localStorage was set by same window
+    // Note: storage event only fires across tabs, so we poll for same-window changes
+    const interval = setInterval(checkViewed, 500)
+
+    return () => {
+      window.removeEventListener("storage", handleStorageChange)
+      clearInterval(interval)
     }
   }, [pathname])
 
+  // Track previous counts to detect when new items appear
+  const prevDeliveryCountRef = useRef(0)
+  const prevLiveSessionCountRef = useRef(0)
+
+  // Reset viewed status when count goes from 0 to > 0 (new items appeared)
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    
+    // If delivery count increased from 0, reset viewed status
+    if (prevDeliveryCountRef.current === 0 && deliveryCount > 0 && hasViewedDeliveries) {
+      localStorage.removeItem("deliveries-viewed")
+      setHasViewedDeliveries(false)
+    }
+    prevDeliveryCountRef.current = deliveryCount
+    
+    // If live session count increased from 0, reset viewed status
+    if (prevLiveSessionCountRef.current === 0 && liveSessionCount > 0 && hasViewedLiveSessions) {
+      localStorage.removeItem("live-sessions-viewed")
+      setHasViewedLiveSessions(false)
+    }
+    prevLiveSessionCountRef.current = liveSessionCount
+  }, [deliveryCount, liveSessionCount, hasViewedDeliveries, hasViewedLiveSessions])
+
   // Calculate badge count for deliveries (only show if not viewed and count > 0)
   const deliveryBadgeCount = useMemo(() => {
-    if (hasViewedDeliveries || deliveryCount === 0) return 0
+    // Don't show badge if loading, viewed, or count is 0
+    if (deliveryLoading || hasViewedDeliveries || deliveryCount === 0) return 0
     return deliveryCount
-  }, [hasViewedDeliveries, deliveryCount])
+  }, [hasViewedDeliveries, deliveryCount, deliveryLoading])
 
   // Calculate badge count for live sessions (only show if not viewed and count > 0)
   const liveSessionBadgeCount = useMemo(() => {
-    if (hasViewedLiveSessions || liveSessionCount === 0) return 0
+    // Don't show badge if loading, viewed, or count is 0
+    if (liveSessionLoading || hasViewedLiveSessions || liveSessionCount === 0) return 0
     return liveSessionCount
-  }, [hasViewedLiveSessions, liveSessionCount])
+  }, [hasViewedLiveSessions, liveSessionCount, liveSessionLoading])
 
   return (
     <>
@@ -288,11 +361,11 @@ export function StudentSidebar() {
       >
         <div className="flex flex-col h-screen">
           {/* Header Section */}
-          <div className="p-4 border-b border-border">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-lg">
-                  <GraduationCap className="w-6 h-6 text-primary-foreground" />
+          <div className={`${sidebarOpen ? "p-4" : "p-2"} ${sidebarOpen ? "border-b border-border" : "border-b-0"}`}>
+            <div className={`flex items-center ${sidebarOpen ? "justify-between mb-3" : "justify-center flex-col gap-2"}`}>
+              <div className={`flex items-center ${sidebarOpen ? "gap-3" : "justify-center"}`}>
+                <div className={`${sidebarOpen ? "w-10 h-10" : "w-12 h-12"} rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-lg`}>
+                  <GraduationCap className={`${sidebarOpen ? "w-6 h-6" : "w-7 h-7"} text-primary-foreground`} />
                 </div>
                 {sidebarOpen && (
                   <div>
@@ -304,28 +377,37 @@ export function StudentSidebar() {
                 )}
               </div>
               
-              {/* Toggle Button - Always at Top */}
-              <button
-                onClick={toggleSidebar}
-                className="w-8 h-8 rounded-lg bg-muted hover:bg-accent/20 flex items-center justify-center transition-all duration-200 hover:shadow-md active:scale-95 flex-shrink-0"
-                aria-label={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
-              >
-                {sidebarOpen ? (
+              {/* Toggle Button */}
+              {sidebarOpen && (
+                <button
+                  onClick={toggleSidebar}
+                  className="w-8 h-8 rounded-lg bg-muted hover:bg-accent/20 flex items-center justify-center transition-all duration-200 hover:shadow-md active:scale-95 flex-shrink-0"
+                  aria-label="Collapse sidebar"
+                >
                   <ChevronLeft className="w-4 h-4 text-foreground" />
-                ) : (
-                  <ChevronRight className="w-4 h-4 text-foreground" />
-                )}
-              </button>
+                </button>
+              )}
             </div>
             
             {/* Theme Toggle */}
             <div className={`${sidebarOpen ? 'w-full' : 'flex justify-center'}`}>
               <ThemeToggle />
             </div>
+            
+            {/* Expand button when collapsed */}
+            {!sidebarOpen && (
+              <button
+                onClick={toggleSidebar}
+                className="w-full mt-2 p-2 rounded-lg bg-muted hover:bg-accent/20 flex items-center justify-center transition-all duration-200 hover:shadow-md active:scale-95"
+                aria-label="Expand sidebar"
+              >
+                <ChevronRight className="w-4 h-4 text-foreground" />
+              </button>
+            )}
           </div>
 
           {/* Navigation Menu */}
-          <nav className="flex-1 p-4 space-y-1 overflow-y-auto custom-scrollbar">
+          <nav className={`flex-1 ${sidebarOpen ? "p-4" : "p-2"} space-y-1 overflow-y-auto custom-scrollbar`}>
             {menuItems.map((item) => {
               const Icon = item.icon
               const active = isActive(item.href)
@@ -334,7 +416,7 @@ export function StudentSidebar() {
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`w-full group relative flex items-center gap-3 px-4 py-3.5 rounded-xl transition-all duration-200 active:scale-[0.98] ${
+                  className={`w-full group relative flex items-center ${sidebarOpen ? "gap-3 px-4" : "justify-center px-2"} py-3.5 rounded-xl transition-all duration-200 active:scale-[0.98] ${
                     active ? "bg-muted shadow-md" : "hover:bg-muted/50"
                   }`}
                   title={!sidebarOpen ? item.label : ""}
@@ -399,7 +481,7 @@ export function StudentSidebar() {
           </nav>
 
           {/* User Section & Logout */}
-          <div className="p-4 border-t border-border space-y-3">
+          <div className={`${sidebarOpen ? "p-4" : "p-2"} ${sidebarOpen ? "border-t border-border" : "border-t-0"} space-y-3`}>
             {sidebarOpen && (
               <div className="bg-muted rounded-xl p-4 border border-border">
                 <div className="flex items-center gap-3">

@@ -3,6 +3,7 @@
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { useEffect, useState, useCallback, useMemo, memo } from "react"
+import { useQuery } from "@tanstack/react-query"
 import { useToast } from "@/hooks/use-toast"
 import Link from "next/link"
 import LoadingBubbles from "@/components/loadingBubbles"
@@ -25,9 +26,7 @@ export default function UploadVideos() {
   const { data: session, status } = useSession()
   const router = useRouter()
   const { toast } = useToast()
-  const [courses, setCourses] = useState([])
   const [selectedCourse, setSelectedCourse] = useState("")
-  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -41,11 +40,16 @@ export default function UploadVideos() {
     }
   }, [status, session, router])
 
-  const fetchCourses = useCallback(async () => {
-    if (!session?.user?.id) return
-
-    try {
-      setLoading(true)
+  const {
+    data: courses = [],
+    isLoading,
+    isError,
+    error,
+  } = useQuery({
+    queryKey: ["instructorCourses", session?.user?.id],
+    queryFn: async () => {
+      if (!session?.user?.id) return []
+      
       const res = await fetch(`/api/courses?instructorId=${session.user.id}`, {
         cache: "no-store",
       })
@@ -54,27 +58,18 @@ export default function UploadVideos() {
         throw new Error("Failed to fetch courses")
       }
 
-      const data = await res.json()
-      setCourses(data || [])
-    } catch (error) {
-      console.error("Error fetching courses:", error)
+      return await res.json()
+    },
+    enabled: !!session?.user?.id,
+    staleTime: 30 * 1000, // 30 seconds
+    onError: (error) => {
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Failed to load courses. Please try again.",
+        description: error.message || "Failed to load courses. Please try again.",
       })
-      setCourses([])
-    } finally {
-      setLoading(false)
-    }
-  }, [session?.user?.id, toast])
-
-  useEffect(() => {
-    if (session?.user?.id) {
-      fetchCourses()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session?.user?.id])
+    },
+  })
 
   const handleCourseSelect = useCallback((courseId) => {
     setSelectedCourse(courseId)
@@ -111,7 +106,7 @@ export default function UploadVideos() {
     []
   )
 
-  if (status === "loading" || loading) {
+  if (status === "loading" || isLoading || !session?.user?.id) {
     return <LoadingBubbles />
   }
 

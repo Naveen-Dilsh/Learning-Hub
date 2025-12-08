@@ -2,15 +2,15 @@
 
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo } from "react"
+import { useQuery } from "@tanstack/react-query"
 import Link from "next/link"
 import { Plus, Edit, Video, Users, DollarSign, BookOpen, Search, Filter, Calendar } from "lucide-react"
+import LoadingBubbles from "@/components/loadingBubbles"
 
 export default function InstructorCourses() {
   const { data: session, status } = useSession()
   const router = useRouter()
-  const [courses, setCourses] = useState([])
-  const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
   const [filter, setFilter] = useState("all") // all, published, draft
 
@@ -20,40 +20,45 @@ export default function InstructorCourses() {
     }
   }, [status, router])
 
-  useEffect(() => {
-    if (session?.user?.id) {
-      fetchCourses()
-    }
-  }, [session])
-
-  const fetchCourses = async () => {
-    try {
-      const res = await fetch(`/api/courses?instructorId=${session.user.id}`)
-      const data = await res.json()
-      setCourses(data)
-    } catch (error) {
-      console.error("Error fetching courses:", error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const filteredCourses = courses.filter(course => {
-    const matchesSearch = course.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         course.description.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesFilter = filter === "all" || 
-                         (filter === "published" && course.published) ||
-                         (filter === "draft" && !course.published)
-    return matchesSearch && matchesFilter
+  const {
+    data: courses = [],
+    isLoading,
+    isError,
+    error,
+  } = useQuery({
+    queryKey: ["instructorCourses", session?.user?.id],
+    queryFn: async () => {
+      if (!session?.user?.id) return []
+      
+      const res = await fetch(`/api/courses?instructorId=${session.user.id}`, {
+        cache: "no-store",
+      })
+      
+      if (!res.ok) {
+        throw new Error("Failed to fetch courses")
+      }
+      
+      return await res.json()
+    },
+    enabled: !!session?.user?.id,
+    staleTime: 10 * 1000, // 10 seconds
   })
 
-  if (status === "loading" || loading) {
+  const filteredCourses = useMemo(() => {
+    return courses.filter(course => {
+      const matchesSearch = course.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                           course.description.toLowerCase().includes(searchTerm.toLowerCase())
+      const matchesFilter = filter === "all" || 
+                           (filter === "published" && course.published) ||
+                           (filter === "draft" && !course.published)
+      return matchesSearch && matchesFilter
+    })
+  }, [courses, searchTerm, filter])
+
+  if (status === "loading" || isLoading || !session?.user?.id) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
-          <p className="text-muted-foreground font-medium">Loading courses...</p>
-        </div>
+        <LoadingBubbles />
       </div>
     )
   }

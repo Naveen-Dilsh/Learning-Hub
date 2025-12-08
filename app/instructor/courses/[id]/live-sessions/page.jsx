@@ -3,6 +3,7 @@
 import { useState, useEffect, use, useCallback, useMemo, memo } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { useToast } from "@/hooks/use-toast"
 import Link from "next/link"
 import LoadingBubbles from "@/components/loadingBubbles"
@@ -212,15 +213,13 @@ export default function ManageLiveSessionsPage({ params }) {
   const { data: session, status: authStatus } = useSession()
   const router = useRouter()
   const { toast } = useToast()
+  const queryClient = useQueryClient()
 
-  const [liveSessions, setLiveSessions] = useState([])
-  const [loading, setLoading] = useState(true)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingSession, setEditingSession] = useState(null)
-  const [submitting, setSubmitting] = useState(false)
   const [copiedSessionId, setCopiedSessionId] = useState(null)
-  const [deletingSessionId, setDeletingSessionId] = useState(null)
   const [deleteConfirm, setDeleteConfirm] = useState(null)
+  const [deletingSessionId, setDeletingSessionId] = useState(null)
 
   const [formData, setFormData] = useState({
     title: "",
@@ -240,37 +239,41 @@ export default function ManageLiveSessionsPage({ params }) {
     }
   }, [authStatus, session, router])
 
-  const fetchLiveSessions = useCallback(async () => {
-    if (!courseId) return
-
-    try {
-      setLoading(true)
+  const {
+    data: liveSessionsData,
+    isLoading,
+    isError,
+    error,
+  } = useQuery({
+    queryKey: ["liveSessions", courseId],
+    queryFn: async () => {
+      if (!courseId) return { liveSessions: [] }
+      
       const res = await fetch(`/api/instructor/courses/${courseId}/live-sessions`, {
         cache: "no-store",
       })
-      const data = await res.json()
-      if (res.ok) {
-        setLiveSessions(Array.isArray(data.liveSessions) ? data.liveSessions : [])
-      } else {
+      
+      if (!res.ok) {
+        const data = await res.json()
         throw new Error(data.error || "Failed to fetch live sessions")
       }
-    } catch (error) {
-      console.error("Error fetching live sessions:", error)
+      
+      return await res.json()
+    },
+    enabled: !!courseId && authStatus === "authenticated",
+    staleTime: 30 * 1000, // 30 seconds
+    onError: (error) => {
       toast({
         variant: "destructive",
         title: "Error Loading Sessions",
         description: error.message || "Failed to load live sessions. Please try again.",
       })
-    } finally {
-      setLoading(false)
-    }
-  }, [courseId, toast])
+    },
+  })
 
-  useEffect(() => {
-    if (courseId && authStatus === "authenticated") {
-      fetchLiveSessions()
-    }
-  }, [courseId, authStatus, fetchLiveSessions])
+  const liveSessions = useMemo(() => {
+    return Array.isArray(liveSessionsData?.liveSessions) ? liveSessionsData.liveSessions : []
+  }, [liveSessionsData])
 
   const resetForm = useCallback(() => {
     setFormData({
@@ -302,58 +305,54 @@ export default function ManageLiveSessionsPage({ params }) {
     []
   )
 
+  const saveSessionMutation = useMutation({
+    mutationFn: async (data) => {
+      const url = editingSession
+        ? `/api/instructor/courses/${courseId}/live-sessions/${editingSession.id}`
+        : `/api/instructor/courses/${courseId}/live-sessions`
+
+      const res = await fetch(url, {
+        method: editingSession ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      })
+
+      const result = await res.json()
+
+      if (!res.ok) {
+        throw new Error(result.error || "Failed to save session")
+      }
+
+      return result
+    },
+    onSuccess: () => {
+      // Invalidate and refetch live sessions
+      queryClient.invalidateQueries({ queryKey: ["liveSessions", courseId] })
+      
+      toast({
+        title: editingSession ? "Session Updated" : "Session Created",
+        description: editingSession
+          ? "Live session has been updated successfully."
+          : "Live session has been scheduled successfully.",
+      })
+      setIsDialogOpen(false)
+      resetForm()
+    },
+    onError: (error) => {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message || "Failed to save live session. Please try again.",
+      })
+    },
+  })
+
   const handleSubmit = useCallback(
     async (e) => {
       e.preventDefault()
-      setSubmitting(true)
-
-      try {
-        const url = editingSession
-          ? `/api/instructor/courses/${courseId}/live-sessions/${editingSession.id}`
-          : `/api/instructor/courses/${courseId}/live-sessions`
-
-        const res = await fetch(url, {
-          method: editingSession ? "PATCH" : "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(formData),
-        })
-
-        const data = await res.json()
-
-        if (res.ok) {
-          toast({
-            title: editingSession ? "Session Updated" : "Session Created",
-            description: editingSession
-              ? "Live session has been updated successfully."
-              : "Live session has been scheduled successfully.",
-          })
-          fetchLiveSessions()
-          setIsDialogOpen(false)
-          resetForm()
-        } else {
-          const errorMessage = data.error || "Failed to save session"
-          toast({
-            variant: "destructive",
-            title: "Error",
-            description: errorMessage,
-          })
-          throw new Error(errorMessage)
-        }
-      } catch (error) {
-        console.error("Error saving live session:", error)
-        // Only show toast if it wasn't already shown above
-        if (error.message && !error.message.includes("Failed to save session")) {
-          toast({
-            variant: "destructive",
-            title: "Error",
-            description: error.message || "Failed to save live session. Please try again.",
-          })
-        }
-      } finally {
-        setSubmitting(false)
-      }
+      saveSessionMutation.mutate(formData)
     },
-    [courseId, editingSession, formData, fetchLiveSessions, resetForm, toast]
+    [formData, saveSessionMutation]
   )
 
   const handleDeleteClick = useCallback((liveSession) => {
@@ -364,80 +363,87 @@ export default function ManageLiveSessionsPage({ params }) {
     setDeleteConfirm(null)
   }, [])
 
-  const handleDelete = useCallback(
-    async () => {
-      if (!deleteConfirm) return
+  const deleteSessionMutation = useMutation({
+    mutationFn: async (sessionId) => {
+      const res = await fetch(`/api/instructor/courses/${courseId}/live-sessions/${sessionId}`, {
+        method: "DELETE",
+      })
 
-      const sessionId = deleteConfirm.id
-      setDeleteConfirm(null)
-      setDeletingSessionId(sessionId)
+      const data = await res.json()
 
-      try {
-        const res = await fetch(`/api/instructor/courses/${courseId}/live-sessions/${sessionId}`, {
-          method: "DELETE",
-        })
-
-        const data = await res.json()
-
-        if (res.ok) {
-          toast({
-            title: "Session Deleted",
-            description: `Live session "${deleteConfirm.title}" has been deleted successfully.`,
-          })
-          fetchLiveSessions()
-        } else {
-          const errorMessage = data.error || "Failed to delete session"
-          toast({
-            variant: "destructive",
-            title: "Error",
-            description: errorMessage,
-          })
-          return // Don't throw, toast already shown
-        }
-      } catch (error) {
-        console.error("Error deleting live session:", error)
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: error.message || "Failed to delete live session. Please try again.",
-        })
-      } finally {
-        setDeletingSessionId(null)
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to delete session")
       }
+
+      return data
     },
-    [courseId, deleteConfirm, fetchLiveSessions, toast]
-  )
+    onSuccess: (_, sessionId) => {
+      // Invalidate and refetch live sessions
+      queryClient.invalidateQueries({ queryKey: ["liveSessions", courseId] })
+      
+      toast({
+        title: "Session Deleted",
+        description: `Live session has been deleted successfully.`,
+      })
+      setDeleteConfirm(null)
+      setDeletingSessionId(null)
+    },
+    onError: (error) => {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message || "Failed to delete live session. Please try again.",
+      })
+      setDeletingSessionId(null)
+    },
+  })
+
+  const handleDelete = useCallback(() => {
+    if (!deleteConfirm) return
+    const sessionId = deleteConfirm.id
+    setDeletingSessionId(sessionId)
+    deleteSessionMutation.mutate(sessionId)
+  }, [deleteConfirm, deleteSessionMutation])
+
+  const updateStatusMutation = useMutation({
+    mutationFn: async ({ sessionId, status }) => {
+      const res = await fetch(`/api/instructor/courses/${courseId}/live-sessions/${sessionId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to update status")
+      }
+
+      return data
+    },
+    onSuccess: () => {
+      // Invalidate and refetch live sessions
+      queryClient.invalidateQueries({ queryKey: ["liveSessions", courseId] })
+      
+      toast({
+        title: "Status Updated",
+        description: "Live session status has been updated successfully.",
+      })
+    },
+    onError: (error) => {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message || "Failed to update status. Please try again.",
+      })
+    },
+  })
 
   const handleStatusChange = useCallback(
-    async (sessionId, newStatus) => {
-      try {
-        const res = await fetch(`/api/instructor/courses/${courseId}/live-sessions/${sessionId}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ status: newStatus }),
-        })
-
-        const data = await res.json()
-
-        if (res.ok) {
-          toast({
-            title: "Status Updated",
-            description: "Live session status has been updated successfully.",
-          })
-          fetchLiveSessions()
-        } else {
-          throw new Error(data.error || "Failed to update status")
-        }
-      } catch (error) {
-        console.error("Error updating status:", error)
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: error.message || "Failed to update status. Please try again.",
-        })
-      }
+    (sessionId, newStatus) => {
+      updateStatusMutation.mutate({ sessionId, status: newStatus })
     },
-    [courseId, fetchLiveSessions, toast]
+    [updateStatusMutation]
   )
 
   const copyMeetingUrl = useCallback(async (url, sessionId) => {
@@ -462,7 +468,7 @@ export default function ManageLiveSessionsPage({ params }) {
     setFormData((prev) => ({ ...prev, [field]: value }))
   }, [])
 
-  if (authStatus === "loading" || loading) {
+  if (authStatus === "loading" || isLoading || !courseId) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background">
         <LoadingBubbles />
@@ -592,8 +598,8 @@ export default function ManageLiveSessionsPage({ params }) {
                     <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
                       Cancel
                     </Button>
-                    <Button type="submit" disabled={submitting}>
-                      {submitting ? "Saving..." : editingSession ? "Update" : "Schedule"}
+                    <Button type="submit" disabled={saveSessionMutation.isPending}>
+                      {saveSessionMutation.isPending ? "Saving..." : editingSession ? "Update" : "Schedule"}
                     </Button>
                   </DialogFooter>
                 </form>
@@ -686,7 +692,7 @@ export default function ManageLiveSessionsPage({ params }) {
                 </button>
                 <button
                   onClick={handleDelete}
-                  disabled={deletingSessionId === deleteConfirm.id}
+                  disabled={deleteSessionMutation.isPending && deletingSessionId === deleteConfirm.id}
                   className="flex-1 btn-danger flex items-center justify-center gap-2 px-4 py-2.5 sm:py-3 rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] transition-all"
                 >
                   {deletingSessionId === deleteConfirm.id ? (

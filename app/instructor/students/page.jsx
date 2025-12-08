@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useMemo, memo } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
+import { useQuery } from "@tanstack/react-query"
 import { useToast } from "@/hooks/use-toast"
 import LoadingBubbles from "@/components/loadingBubbles"
 import {
@@ -24,9 +25,6 @@ export default function InstructorStudents() {
   const { data: session, status: authStatus } = useSession()
   const router = useRouter()
   const { toast } = useToast()
-  const [students, setStudents] = useState([])
-  const [stats, setStats] = useState({ totalStudents: 0, totalEnrollments: 0 })
-  const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedStudent, setSelectedStudent] = useState(null)
 
@@ -38,33 +36,39 @@ export default function InstructorStudents() {
     }
   }, [authStatus, session, router])
 
-  useEffect(() => {
-    if (session?.user?.id) {
-      fetchStudents()
-    }
-  }, [session])
-
-  const fetchStudents = useCallback(async () => {
-    try {
-      setLoading(true)
+  const {
+    data: studentsData,
+    isLoading,
+    isError,
+    error,
+  } = useQuery({
+    queryKey: ["instructorStudents", session?.user?.id],
+    queryFn: async () => {
+      if (!session?.user?.id) return { students: [], stats: {} }
+      
       const res = await fetch("/api/instructor/students", {
         cache: "no-store",
       })
-      if (!res.ok) throw new Error("Failed to fetch students")
-      const data = await res.json()
-      setStudents(data.students || [])
-      setStats(data.stats || { totalStudents: 0, totalEnrollments: 0 })
-    } catch (error) {
-      console.error("Error fetching students:", error)
+      
+      if (!res.ok) {
+        throw new Error("Failed to fetch students")
+      }
+      
+      return await res.json()
+    },
+    enabled: !!session?.user?.id,
+    staleTime: 30 * 1000, // 30 seconds
+    onError: (error) => {
       toast({
         title: "Error",
         description: error.message || "Failed to load students",
         variant: "destructive",
       })
-    } finally {
-      setLoading(false)
-    }
-  }, [toast])
+    },
+  })
+
+  const students = useMemo(() => studentsData?.students || [], [studentsData])
+  const stats = useMemo(() => studentsData?.stats || { totalStudents: 0, totalEnrollments: 0 }, [studentsData])
 
   const filteredStudents = useMemo(() => {
     if (!searchQuery.trim()) return students
@@ -89,7 +93,7 @@ export default function InstructorStudents() {
     setSelectedStudent(null)
   }, [])
 
-  if (authStatus === "loading" || loading) {
+  if (authStatus === "loading" || isLoading || !session?.user?.id) {
     return <LoadingBubbles />
   }
 

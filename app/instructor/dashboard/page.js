@@ -2,7 +2,8 @@
 
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
-import { useEffect, useState, useCallback, useMemo, memo } from "react"
+import { useEffect, useMemo, memo } from "react"
+import { useQuery } from "@tanstack/react-query"
 import { useToast } from "@/hooks/use-toast"
 import Link from "next/link"
 import LoadingBubbles from "@/components/loadingBubbles"
@@ -104,14 +105,6 @@ export default function InstructorDashboard() {
   const { data: session, status } = useSession()
   const router = useRouter()
   const { toast } = useToast()
-  const [stats, setStats] = useState({
-    totalCourses: 0,
-    totalStudents: 0,
-    totalEarnings: 0,
-    totalEnrollments: 0,
-  })
-  const [courses, setCourses] = useState([])
-  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -121,34 +114,45 @@ export default function InstructorDashboard() {
     }
   }, [status, session, router])
 
-  const fetchDashboardData = useCallback(async () => {
-    if (!session?.user?.id) return
-
-    try {
+  const {
+    data: dashboardData,
+    isLoading,
+    isError,
+    error,
+  } = useQuery({
+    queryKey: ["instructorDashboard", session?.user?.id],
+    queryFn: async () => {
+      if (!session?.user?.id) return { stats: {}, courses: [] }
+      
       const res = await fetch(`/api/instructor/dashboard?instructorId=${session.user.id}`, {
-        next: { revalidate: 60 },
+        cache: "no-store",
       })
-      if (!res.ok) throw new Error("Failed to fetch dashboard data")
-      const data = await res.json()
-      setStats(data.stats)
-      setCourses(data.courses)
-    } catch (error) {
-      console.error("Error fetching dashboard data:", error)
+      
+      if (!res.ok) {
+        throw new Error("Failed to fetch dashboard data")
+      }
+      
+      return await res.json()
+    },
+    enabled: !!session?.user?.id,
+    staleTime: 10 * 1000, // 60 seconds
+    onError: (error) => {
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Failed to load dashboard data. Please try again.",
+        description: error.message || "Failed to load dashboard data. Please try again.",
       })
-    } finally {
-      setLoading(false)
-    }
-  }, [session?.user?.id, toast])
+    },
+  })
 
-  useEffect(() => {
-    if (session?.user?.id) {
-      fetchDashboardData()
-    }
-  }, [session?.user?.id, fetchDashboardData])
+  const stats = useMemo(() => dashboardData?.stats || {
+    totalCourses: 0,
+    totalStudents: 0,
+    totalEarnings: 0,
+    totalEnrollments: 0,
+  }, [dashboardData])
+
+  const courses = useMemo(() => dashboardData?.courses || [], [dashboardData])
 
   const statCards = useMemo(
     () => [
@@ -184,7 +188,7 @@ export default function InstructorDashboard() {
     [stats]
   )
 
-  if (status === "loading" || loading) {
+  if (status === "loading" || isLoading || !session?.user?.id) {
     return <LoadingBubbles />
   }
 

@@ -22,15 +22,14 @@ import {
   Package,
 } from "lucide-react"
 import { ThemeToggle } from "@/components/theme-toggle"
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useRef } from "react"
+import { useQuery } from "@tanstack/react-query"
 
 export function InstructorSidebar() {
   const pathname = usePathname()
   const { sidebarOpen, setSidebarOpen } = useDashboard()
   const { data: session } = useSession()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  const [enrollmentCount, setEnrollmentCount] = useState(0)
-  const [deliveryCount, setDeliveryCount] = useState(0)
   const [hasViewedEnrollments, setHasViewedEnrollments] = useState(false)
   const [hasViewedDeliveries, setHasViewedDeliveries] = useState(false)
 
@@ -65,72 +64,124 @@ export function InstructorSidebar() {
 
   const isActive = (href) => pathname === href
 
-  // Fetch enrollment count
-  useEffect(() => {
-    if (!session?.user?.id) return
-
-    const fetchEnrollmentCount = async () => {
-      try {
-        const res = await fetch("/api/instructor/enrollments/pending", {
-          cache: "no-store",
-        })
-        if (res.ok) {
-          const data = await res.json()
-          const enrollments = Array.isArray(data.enrollments) ? data.enrollments : []
-          setEnrollmentCount(enrollments.length)
-        }
-      } catch (error) {
-        console.error("Error fetching enrollment count:", error)
+  // Fetch enrollment count with React Query
+  const { data: enrollmentData, isLoading: enrollmentLoading } = useQuery({
+    queryKey: ["pendingEnrollments", session?.user?.id],
+    queryFn: async () => {
+      if (!session?.user?.id) return { enrollments: [] }
+      
+      const res = await fetch("/api/instructor/enrollments/pending", {
+        cache: "no-store",
+      })
+      
+      if (!res.ok) {
+        throw new Error("Failed to fetch enrollments")
       }
-    }
+      
+      const data = await res.json()
+      return data
+    },
+    enabled: !!session?.user?.id && !!session?.user?.role && (session.user.role === "INSTRUCTOR" || session.user.role === "ADMIN"),
+    refetchInterval: 30000, // Refetch every 30 seconds
+    staleTime: 10 * 1000, // Consider data stale after 10 seconds
+    retry: 2,
+  })
 
-    fetchEnrollmentCount()
-    // Refresh count every 30 seconds
-    const interval = setInterval(fetchEnrollmentCount, 30000)
-    return () => clearInterval(interval)
-  }, [session?.user?.id])
-
-  // Fetch delivery count
-  useEffect(() => {
-    if (!session?.user?.id) return
-
-    const fetchDeliveryCount = async () => {
-      try {
-        const res = await fetch("/api/instructor/deliveries", {
-          cache: "no-store",
-        })
-        if (res.ok) {
-          const data = await res.json()
-          const deliveries = Array.isArray(data.deliveries) ? data.deliveries : []
-          // Count pending and processing deliveries
-          const activeDeliveries = deliveries.filter(
-            (d) => d.status === "PENDING" || d.status === "PROCESSING"
-          )
-          setDeliveryCount(activeDeliveries.length)
-        }
-      } catch (error) {
-        console.error("Error fetching delivery count:", error)
+  // Fetch delivery count with React Query
+  const { data: deliveryData, isLoading: deliveryLoading } = useQuery({
+    queryKey: ["instructorDeliveries", session?.user?.id],
+    queryFn: async () => {
+      if (!session?.user?.id) return { deliveries: [], counts: {} }
+      
+      const res = await fetch("/api/instructor/deliveries", {
+        cache: "no-store",
+      })
+      
+      if (!res.ok) {
+        throw new Error("Failed to fetch deliveries")
       }
-    }
+      
+      const data = await res.json()
+      return data
+    },
+    enabled: !!session?.user?.id && !!session?.user?.role && (session.user.role === "INSTRUCTOR" || session.user.role === "ADMIN"),
+    refetchInterval: 30000, // Refetch every 30 seconds
+    staleTime: 10 * 1000, // Consider data stale after 10 seconds
+    retry: 2,
+  })
 
-    fetchDeliveryCount()
-    // Refresh count every 30 seconds
-    const interval = setInterval(fetchDeliveryCount, 30000)
-    return () => clearInterval(interval)
-  }, [session?.user?.id])
+  // Calculate counts from React Query data
+  const enrollmentCount = useMemo(() => {
+    if (enrollmentLoading || !enrollmentData) return 0
+    const enrollments = Array.isArray(enrollmentData?.enrollments) ? enrollmentData.enrollments : []
+    return enrollments.length
+  }, [enrollmentData, enrollmentLoading])
+
+  const deliveryCount = useMemo(() => {
+    if (deliveryLoading || !deliveryData) return 0
+    const deliveries = Array.isArray(deliveryData?.deliveries) ? deliveryData.deliveries : []
+    // Count pending and processing deliveries
+    return deliveries.filter(
+      (d) => d.status === "PENDING" || d.status === "PROCESSING"
+    ).length
+  }, [deliveryData, deliveryLoading])
+
+  // Track previous counts to detect when new items appear
+  const prevEnrollmentCountRef = useRef(0)
+  const prevDeliveryCountRef = useRef(0)
+
+  // Reset viewed status when count goes from 0 to > 0 (new items appeared)
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    
+    // If enrollment count increased from 0, reset viewed status
+    if (prevEnrollmentCountRef.current === 0 && enrollmentCount > 0 && hasViewedEnrollments) {
+      localStorage.removeItem("instructor-enrollments-viewed")
+      setHasViewedEnrollments(false)
+    }
+    prevEnrollmentCountRef.current = enrollmentCount
+    
+    // If delivery count increased from 0, reset viewed status
+    if (prevDeliveryCountRef.current === 0 && deliveryCount > 0 && hasViewedDeliveries) {
+      localStorage.removeItem("instructor-deliveries-viewed")
+      setHasViewedDeliveries(false)
+    }
+    prevDeliveryCountRef.current = deliveryCount
+  }, [enrollmentCount, deliveryCount, hasViewedEnrollments, hasViewedDeliveries])
 
   // Check if user has viewed enrollments page
   useEffect(() => {
     if (typeof window === "undefined") return
 
-    const viewed = localStorage.getItem("instructor-enrollments-viewed")
-    setHasViewedEnrollments(viewed === "true")
+    const checkViewed = () => {
+      const viewed = localStorage.getItem("instructor-enrollments-viewed")
+      setHasViewedEnrollments(viewed === "true")
+    }
+
+    // Check on mount and pathname change
+    checkViewed()
 
     // Mark as viewed when on enrollments page
     if (pathname === "/instructor/enrollments/pending") {
       localStorage.setItem("instructor-enrollments-viewed", "true")
       setHasViewedEnrollments(true)
-      setEnrollmentCount(0) // Clear count when viewing
+    }
+
+    // Listen for storage changes (when page sets it)
+    const handleStorageChange = (e) => {
+      if (e.key === "instructor-enrollments-viewed") {
+        setHasViewedEnrollments(e.newValue === "true")
+      }
+    }
+
+    window.addEventListener("storage", handleStorageChange)
+    // Also check periodically in case localStorage was set by same window
+    // Note: storage event only fires across tabs, so we poll for same-window changes
+    const interval = setInterval(checkViewed, 500)
+
+    return () => {
+      window.removeEventListener("storage", handleStorageChange)
+      clearInterval(interval)
     }
   }, [pathname])
 
@@ -138,27 +189,50 @@ export function InstructorSidebar() {
   useEffect(() => {
     if (typeof window === "undefined") return
 
-    const viewed = localStorage.getItem("instructor-deliveries-viewed")
-    setHasViewedDeliveries(viewed === "true")
+    const checkViewed = () => {
+      const viewed = localStorage.getItem("instructor-deliveries-viewed")
+      setHasViewedDeliveries(viewed === "true")
+    }
+
+    // Check on mount and pathname change
+    checkViewed()
 
     // Mark as viewed when on deliveries page
     if (pathname === "/instructor/deliveries") {
       localStorage.setItem("instructor-deliveries-viewed", "true")
       setHasViewedDeliveries(true)
-      setDeliveryCount(0) // Clear count when viewing
+    }
+
+    // Listen for storage changes (when page sets it)
+    const handleStorageChange = (e) => {
+      if (e.key === "instructor-deliveries-viewed") {
+        setHasViewedDeliveries(e.newValue === "true")
+      }
+    }
+
+    window.addEventListener("storage", handleStorageChange)
+    // Also check periodically in case localStorage was set by same window
+    // Note: storage event only fires across tabs, so we poll for same-window changes
+    const interval = setInterval(checkViewed, 500)
+
+    return () => {
+      window.removeEventListener("storage", handleStorageChange)
+      clearInterval(interval)
     }
   }, [pathname])
 
   // Calculate badge counts (only show if not viewed and count > 0)
   const enrollmentBadgeCount = useMemo(() => {
-    if (hasViewedEnrollments || enrollmentCount === 0) return 0
+    // Don't show badge if loading, viewed, or count is 0
+    if (enrollmentLoading || hasViewedEnrollments || enrollmentCount === 0) return 0
     return enrollmentCount
-  }, [hasViewedEnrollments, enrollmentCount])
+  }, [hasViewedEnrollments, enrollmentCount, enrollmentLoading])
 
   const deliveryBadgeCount = useMemo(() => {
-    if (hasViewedDeliveries || deliveryCount === 0) return 0
+    // Don't show badge if loading, viewed, or count is 0
+    if (deliveryLoading || hasViewedDeliveries || deliveryCount === 0) return 0
     return deliveryCount
-  }, [hasViewedDeliveries, deliveryCount])
+  }, [hasViewedDeliveries, deliveryCount, deliveryLoading])
 
   return (
     <>
@@ -277,11 +351,11 @@ export function InstructorSidebar() {
       >
         <div className="flex flex-col h-full">
           {/* Header Section */}
-          <div className="p-6 border-b border-border">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-lg">
-                  <GraduationCap className="w-6 h-6 text-primary-foreground" />
+          <div className={`${sidebarOpen ? "p-4" : "p-2"} ${sidebarOpen ? "border-b border-border" : "border-b-0"}`}>
+            <div className={`flex items-center ${sidebarOpen ? "justify-between mb-3" : "justify-center flex-col gap-2"}`}>
+              <div className={`flex items-center ${sidebarOpen ? "gap-3" : "justify-center"}`}>
+                <div className={`${sidebarOpen ? "w-10 h-10" : "w-12 h-12"} rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-lg`}>
+                  <GraduationCap className={`${sidebarOpen ? "w-6 h-6" : "w-7 h-7"} text-primary-foreground`} />
                 </div>
                 {sidebarOpen && (
                   <div>
@@ -292,22 +366,38 @@ export function InstructorSidebar() {
                   </div>
                 )}
               </div>
+              
+              {/* Toggle Button */}
+              {sidebarOpen && (
+                <button
+                  onClick={() => setSidebarOpen(!sidebarOpen)}
+                  className="w-8 h-8 rounded-lg bg-muted hover:bg-accent/20 flex items-center justify-center transition-all duration-200 hover:shadow-md active:scale-95 flex-shrink-0"
+                  aria-label="Collapse sidebar"
+                >
+                  <ChevronLeft className="w-4 h-4 text-foreground" />
+                </button>
+              )}
+            </div>
+            
+            {/* Theme Toggle */}
+            <div className={`${sidebarOpen ? 'w-full' : 'flex justify-center'}`}>
+              <ThemeToggle />
+            </div>
+            
+            {/* Expand button when collapsed */}
+            {!sidebarOpen && (
               <button
                 onClick={() => setSidebarOpen(!sidebarOpen)}
-                className="w-8 h-8 rounded-lg bg-muted hover:bg-accent/20 flex items-center justify-center transition-all duration-200 hover:shadow-md"
+                className="w-full mt-2 p-2 rounded-lg bg-muted hover:bg-accent/20 flex items-center justify-center transition-all duration-200 hover:shadow-md active:scale-95"
+                aria-label="Expand sidebar"
               >
-                {sidebarOpen ? (
-                  <ChevronLeft className="w-4 h-4 text-foreground" />
-                ) : (
-                  <ChevronRight className="w-4 h-4 text-foreground" />
-                )}
+                <ChevronRight className="w-4 h-4 text-foreground" />
               </button>
-            </div>
-            {sidebarOpen && <ThemeToggle />}
+            )}
           </div>
 
           {/* Navigation Menu */}
-          <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+          <nav className={`flex-1 ${sidebarOpen ? "p-4" : "p-2"} space-y-1 overflow-y-auto`}>
             {menuItems.map((item) => {
               const Icon = item.icon
               const active = isActive(item.href)
@@ -316,10 +406,11 @@ export function InstructorSidebar() {
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`w-full group relative flex items-center gap-3 px-4 py-3.5 rounded-xl transition-all duration-200 ${
+                  className={`w-full group relative flex items-center ${sidebarOpen ? "gap-3 px-4" : "justify-center px-2"} py-3.5 rounded-xl transition-all duration-200 active:scale-[0.98] ${
                     active ? "bg-muted shadow-md" : "hover:bg-muted/50"
                   }`}
                   title={!sidebarOpen ? item.label : ""}
+                  aria-label={item.label}
                 >
                   {active && (
                     <div
@@ -378,7 +469,7 @@ export function InstructorSidebar() {
           </nav>
 
           {/* User Section & Logout */}
-          <div className="p-4 border-t border-border space-y-3">
+          <div className={`${sidebarOpen ? "p-4" : "p-2"} ${sidebarOpen ? "border-t border-border" : "border-t-0"} space-y-3`}>
             {sidebarOpen && (
               <div className="bg-muted rounded-xl p-4 border border-border">
                 <div className="flex items-center gap-3">

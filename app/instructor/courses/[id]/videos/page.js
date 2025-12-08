@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useMemo, memo } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { useSession } from "next-auth/react"
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import Link from "next/link"
 import { ArrowLeft, Video, Trash2, Edit, Users, DollarSign, Clock, PlayCircle, Check, X, Eye, EyeOff } from "lucide-react"
 import TusVideoUploader from "@/components/tus-video-uploader"
@@ -134,8 +135,7 @@ export default function ManageVideos() {
   const router = useRouter()
   const { data: session, status } = useSession()
   const { toast } = useToast()
-  const [course, setCourse] = useState(null)
-  const [loading, setLoading] = useState(true)
+  const queryClient = useQueryClient()
   const [editingVideo, setEditingVideo] = useState(null)
   const [videoForm, setVideoForm] = useState({ title: "", description: "" })
   const [deleteConfirm, setDeleteConfirm] = useState(null)
@@ -152,17 +152,16 @@ export default function ManageVideos() {
     }
   }, [status, session, router])
 
-  useEffect(() => {
-    if (params.id && status === "authenticated") {
-      fetchCourse()
-    }
-  }, [params.id, status])
-
-  const fetchCourse = useCallback(async () => {
-    try {
-      setLoading(true)
+  const {
+    data: course,
+    isLoading,
+    isError,
+    error,
+  } = useQuery({
+    queryKey: ["course", params.id],
+    queryFn: async () => {
       const res = await fetch(`/api/courses/${params.id}`, {
-        next: { revalidate: 60 },
+        cache: "no-store",
       })
       
       if (!res.ok) {
@@ -170,33 +169,45 @@ export default function ManageVideos() {
         throw new Error(errorData.message || "Failed to fetch course")
       }
       
-      const data = await res.json()
-      setCourse(data)
-    } catch (err) {
+      return await res.json()
+    },
+    enabled: !!params.id && status === "authenticated",
+    staleTime: 60 * 1000, // 60 seconds
+    onError: (error) => {
       toast({
         title: "Error",
-        description: err.message || "Failed to load course",
+        description: error.message || "Failed to load course",
         variant: "destructive",
       })
-    } finally {
-      setLoading(false)
-    }
-  }, [params.id, toast])
+    },
+  })
 
-  const handleUploadComplete = useCallback((mediaId) => {
-    toast({
-      title: "Success",
-      description: "Video uploaded successfully!",
+  const handleUploadComplete = useCallback(async () => {
+    // Immediately refetch course data to show new video
+    await queryClient.refetchQueries({ 
+      queryKey: ["course", params.id],
+      exact: true 
     })
-    fetchCourse()
-  }, [toast, fetchCourse])
+    
+    // Also invalidate to ensure all related queries are updated
+    queryClient.invalidateQueries({ 
+      queryKey: ["course", params.id],
+      exact: false 
+    })
+    
+    // Invalidate instructor courses list to update video counts
+    queryClient.invalidateQueries({ 
+      queryKey: ["instructorCourses"],
+      exact: false 
+    })
+  }, [queryClient, params.id])
 
-  const handleToggleFree = useCallback(async (videoId, currentStatus) => {
-    try {
+  const toggleFreeMutation = useMutation({
+    mutationFn: async ({ videoId, isFree }) => {
       const res = await fetch(`/api/courses/${params.id}/videos/${videoId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ isFree: !currentStatus }),
+        body: JSON.stringify({ isFree }),
       })
 
       if (!res.ok) {
@@ -204,22 +215,32 @@ export default function ManageVideos() {
         throw new Error(errorData.message || "Failed to update video")
       }
 
+      return await res.json()
+    },
+    onSuccess: (_, variables) => {
+      // Invalidate and refetch course data
+      queryClient.invalidateQueries({ queryKey: ["course", params.id] })
+      
       toast({
         title: "Success",
-        description: !currentStatus ? "Video set as free preview!" : "Video removed from free preview",
+        description: variables.isFree ? "Video set as free preview!" : "Video removed from free preview",
       })
-      fetchCourse()
-    } catch (err) {
+    },
+    onError: (error) => {
       toast({
         title: "Error",
-        description: err.message || "Failed to update video preview status",
+        description: error.message || "Failed to update video preview status",
         variant: "destructive",
       })
-    }
-  }, [params.id, toast, fetchCourse])
+    },
+  })
 
-  const handleDeleteVideo = useCallback(async (videoId) => {
-    try {
+  const handleToggleFree = useCallback((videoId, currentStatus) => {
+    toggleFreeMutation.mutate({ videoId, isFree: !currentStatus })
+  }, [toggleFreeMutation])
+
+  const deleteVideoMutation = useMutation({
+    mutationFn: async (videoId) => {
       const res = await fetch(`/api/courses/${params.id}/videos/${videoId}`, {
         method: "DELETE",
       })
@@ -229,27 +250,71 @@ export default function ManageVideos() {
         throw new Error(errorData.message || "Failed to delete video")
       }
 
+      return await res.json()
+    },
+    onSuccess: () => {
+      // Invalidate and refetch course data
+      queryClient.invalidateQueries({ queryKey: ["course", params.id] })
+      
       toast({
         title: "Success",
         description: "Video deleted successfully!",
       })
       setDeleteConfirm(null)
-      fetchCourse()
-    } catch (err) {
+    },
+    onError: (error) => {
       toast({
         title: "Error",
-        description: err.message || "Failed to delete video",
+        description: error.message || "Failed to delete video",
         variant: "destructive",
       })
-    }
-  }, [params.id, toast, fetchCourse])
+    },
+  })
+
+  const handleDeleteVideo = useCallback((videoId) => {
+    deleteVideoMutation.mutate(videoId)
+  }, [deleteVideoMutation])
 
   const handleEditVideo = useCallback((video) => {
     setEditingVideo(video.id)
     setVideoForm({ title: video.title, description: video.description || "" })
   }, [])
 
-  const handleUpdateVideo = useCallback(async (videoId) => {
+  const updateVideoMutation = useMutation({
+    mutationFn: async ({ videoId, data }) => {
+      const res = await fetch(`/api/courses/${params.id}/videos/${videoId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      })
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}))
+        throw new Error(errorData.message || "Failed to update video")
+      }
+
+      return await res.json()
+    },
+    onSuccess: () => {
+      // Invalidate and refetch course data
+      queryClient.invalidateQueries({ queryKey: ["course", params.id] })
+      
+      toast({
+        title: "Success",
+        description: "Video updated successfully!",
+      })
+      setEditingVideo(null)
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update video",
+        variant: "destructive",
+      })
+    },
+  })
+
+  const handleUpdateVideo = useCallback((videoId) => {
     if (!videoForm.title.trim()) {
       toast({
         title: "Validation Error",
@@ -259,36 +324,12 @@ export default function ManageVideos() {
       return
     }
 
-    try {
-      const res = await fetch(`/api/courses/${params.id}/videos/${videoId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(videoForm),
-      })
-
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}))
-        throw new Error(errorData.message || "Failed to update video")
-      }
-
-      toast({
-        title: "Success",
-        description: "Video updated successfully!",
-      })
-      setEditingVideo(null)
-      fetchCourse()
-    } catch (err) {
-      toast({
-        title: "Error",
-        description: err.message || "Failed to update video",
-        variant: "destructive",
-      })
-    }
-  }, [params.id, videoForm, toast, fetchCourse])
+    updateVideoMutation.mutate({ videoId, data: videoForm })
+  }, [videoForm, updateVideoMutation, toast])
 
   const videoCount = useMemo(() => course?.videos?.length || 0, [course])
 
-  if (status === "loading" || loading) {
+  if (status === "loading" || isLoading || !params.id) {
     return <LoadingBubbles />
   }
 
