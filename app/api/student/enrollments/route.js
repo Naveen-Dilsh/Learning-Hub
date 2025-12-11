@@ -113,7 +113,7 @@ export async function GET(request) {
     )
 
     // Parallel queries for better performance
-    const [enrollments, stats] = await Promise.all([
+    const [enrollments, stats, certificates] = await Promise.all([
       prisma.enrollment.findMany({
         where: {
           studentId: session.user.id,
@@ -148,17 +148,33 @@ export async function GET(request) {
         orderBy: { enrolledAt: "desc" },
       }),
       getCachedStats(session.user.id),
+      prisma.certificate.findMany({
+        where: { studentId: session.user.id },
+        select: {
+          id: true,
+          courseId: true,
+          certificateUrl: true,
+          issuedAt: true,
+        },
+      }),
     ])
 
-    // Calculate progress efficiently
+    // Create a map of courseId -> certificate for quick lookup
+    const certificateMap = new Map(
+      certificates.map((cert) => [cert.courseId, cert])
+    )
+
+    // Calculate progress efficiently and attach certificate info
     const enrollmentsWithProgress = enrollments.map((enrollment) => {
       const totalVideos = enrollment.course._count.videos
       const watchedVideos = enrollment._count.progress
       const progress = totalVideos > 0 ? Math.round((watchedVideos / totalVideos) * 100) : 0
+      const certificate = certificateMap.get(enrollment.courseId) || null
 
       return {
         ...enrollment,
         progress,
+        certificate,
       }
     })
 

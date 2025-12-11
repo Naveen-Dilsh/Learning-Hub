@@ -81,7 +81,38 @@ export default function ImageUpload({ onUploadComplete, currentImage, aspectRati
     }
   }
 
-  const handleRemove = () => {
+  const handleRemove = async () => {
+    // Extract image ID from Cloudflare Images URL if it's a Cloudflare URL
+    const currentImageUrl = preview || currentImage
+    if (currentImageUrl && currentImageUrl.includes("imagedelivery.net")) {
+      try {
+        // Extract image ID from URL: https://imagedelivery.net/{accountHash}/{imageId}/public
+        // Example: https://imagedelivery.net/UpcYAZA_EOk-JiIrjAIa2Q/abc123/public
+        const urlMatch = currentImageUrl.match(/imagedelivery\.net\/[^\/]+\/([^\/]+)/)
+        const imageId = urlMatch ? urlMatch[1] : null
+
+        if (imageId) {
+          // Delete from Cloudflare Images
+          const deleteResponse = await fetch("/api/cloudflare/images/delete", {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ imageId }),
+          })
+
+          if (!deleteResponse.ok) {
+            const errorData = await deleteResponse.json().catch(() => ({}))
+            console.error("Failed to delete image from Cloudflare:", errorData)
+            // Continue with removal even if Cloudflare deletion fails
+          } else {
+            console.log("Successfully deleted image from Cloudflare:", imageId)
+          }
+        }
+      } catch (error) {
+        console.error("Error deleting image from Cloudflare:", error)
+        // Continue with removal even if deletion fails
+      }
+    }
+
     setPreview(null)
     if (fileInputRef.current) {
       fileInputRef.current.value = ""

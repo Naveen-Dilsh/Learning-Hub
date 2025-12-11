@@ -20,7 +20,7 @@ export async function GET(request) {
       orderBy: { completedAt: "desc" },
     })
 
-    return NextResponse.json(certificates)
+    return NextResponse.json({ certificates })
   } catch (error) {
     console.error("[v0] Error fetching certificates:", error)
     return NextResponse.json({ message: "Internal server error" }, { status: 500 })

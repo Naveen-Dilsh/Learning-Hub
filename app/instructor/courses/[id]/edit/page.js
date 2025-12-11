@@ -44,12 +44,13 @@ export default function EditCourse() {
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push("/auth/signin")
-    } else if (
-      status === "authenticated" &&
-      session?.user?.role !== "INSTRUCTOR" &&
-      session?.user?.role !== "ADMIN"
-    ) {
-      router.push("/dashboard")
+    } else if (status === "authenticated") {
+      // Block ADMIN access - redirect to allowed page
+      if (session?.user?.role === "ADMIN") {
+        router.push("/instructor/enrollments/pending")
+      } else if (session?.user?.role !== "INSTRUCTOR") {
+        router.push("/dashboard")
+      }
     }
   }, [status, session, router])
 
@@ -444,7 +445,7 @@ export default function EditCourse() {
             <FileUp className="w-5 h-5 text-primary" />
             <h2 className="text-lg sm:text-xl font-bold text-foreground">Course Resources</h2>
           </div>
-          <CourseResources key={resourcesRefreshKey} courseId={params.id} />
+          <CourseResources key={resourcesRefreshKey} courseId={params.id} canEdit={true} />
         </div>
 
         {/* Upload New Resource */}

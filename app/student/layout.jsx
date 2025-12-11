@@ -18,8 +18,12 @@ function StudentLayout({ children }) {
       router.push("/auth/signin")
       return
     }
-    if (status === "authenticated" && session?.user?.role === "INSTRUCTOR") {
-      router.push("/instructor/dashboard")
+    if (status === "authenticated") {
+      if (session?.user?.role === "INSTRUCTOR") {
+        router.push("/instructor/dashboard")
+      } else if (session?.user?.role === "ADMIN") {
+        router.push("/instructor/enrollments/pending")
+      }
     }
   }, [status, session?.user?.role, router])
 
@@ -31,7 +35,7 @@ function StudentLayout({ children }) {
   // Memoize early return conditions
   const shouldShowLoading = useMemo(() => status === "loading", [status])
   const shouldHideLayout = useMemo(
-    () => status === "unauthenticated" || session?.user?.role === "INSTRUCTOR",
+    () => status === "unauthenticated" || session?.user?.role === "INSTRUCTOR" || session?.user?.role === "ADMIN",
     [status, session?.user?.role]
   )
 

@@ -74,8 +74,13 @@ export default function ProfileSettings() {
   useEffect(() => {
     if (authStatus === "unauthenticated") {
       router.push("/auth/signin")
-    } else if (session?.user?.role !== "INSTRUCTOR" && session?.user?.role !== "ADMIN") {
-      router.push("/")
+    } else if (authStatus === "authenticated") {
+      // Block ADMIN access - redirect to allowed page
+      if (session?.user?.role === "ADMIN") {
+        router.push("/instructor/enrollments/pending")
+      } else if (session?.user?.role !== "INSTRUCTOR") {
+        router.push("/")
+      }
     }
   }, [authStatus, session, router])
 

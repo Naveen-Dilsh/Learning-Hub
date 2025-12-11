@@ -178,7 +178,7 @@ export default function StudentDashboard() {
                   </div>
 
                   <Link
-                    href={`/courses/${enrollment.course.id}/watch`}
+                    href={`/student/browse-course/${enrollment.course.id}/watch`}
                     className="btn-primary block w-full px-3 py-2 rounded-lg text-center text-xs sm:text-sm font-medium active:scale-[0.98]"
                   >
                     Continue Learning

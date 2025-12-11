@@ -4,7 +4,7 @@ import { useSession } from "next-auth/react"
 import { useQuery } from "@tanstack/react-query"
 import Link from "next/link"
 import { useMemo, memo } from "react"
-import { BookOpen, Play, TrendingUp } from "lucide-react"
+import { BookOpen, Play, TrendingUp, Award } from "lucide-react"
 import LoadingBubbles from "@/components/loadingBubbles"
 
 // Memoized CourseCard component for better performance
@@ -37,6 +37,18 @@ const CourseCard = memo(({ enrollment }) => {
             </div>
           </div>
         )}
+
+        {/* Certificate Badge */}
+        {enrollment.certificate && (
+          <div className="absolute top-2 left-2 sm:top-3 sm:left-3 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg shadow-md backdrop-blur-sm">
+            <div className="flex items-center gap-1 sm:gap-1.5">
+              <Award className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-emerald-600 dark:text-emerald-400" />
+              <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                Certified
+              </span>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Course Content */}
@@ -64,14 +76,37 @@ const CourseCard = memo(({ enrollment }) => {
           </div>
         </div>
 
-        {/* Continue Learning Button */}
-        <Link
-          href={`/student/browse-course/${enrollment.course.id}/watch`}
-          className="btn-primary flex items-center justify-center gap-2 w-full px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg text-xs sm:text-sm font-semibold active:scale-[0.98]"
-        >
-          <Play className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-          <span>Continue Learning</span>
-        </Link>
+        {/* Action Buttons */}
+        <div className="flex flex-col sm:flex-row gap-2">
+          {enrollment.certificate ? (
+            <>
+              {/* <button
+                onClick={() => {
+                  window.open(`/api/certificates/${enrollment.certificate.id}/download`, "_blank")
+                }}
+                className="btn-primary flex items-center justify-center gap-2 flex-1 px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg text-xs sm:text-sm font-semibold active:scale-[0.98] bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-600 hover:to-yellow-700"
+              >
+                <Award className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                <span>View Certificate</span>
+              </button> */}
+              <Link
+                href={`/student/browse-course/${enrollment.course.id}/watch`}
+                className="btn-secondary flex items-center justify-center gap-2 flex-1 px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg text-xs sm:text-sm font-semibold active:scale-[0.98]"
+              >
+                <Play className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                <span>Review Course</span>
+              </Link>
+            </>
+          ) : (
+            <Link
+              href={`/student/browse-course/${enrollment.course.id}/watch`}
+              className="btn-primary flex items-center justify-center gap-2 w-full px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg text-xs sm:text-sm font-semibold active:scale-[0.98]"
+            >
+              <Play className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span>Continue Learning</span>
+            </Link>
+          )}
+        </div>
       </div>
     </div>
   )

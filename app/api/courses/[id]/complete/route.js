@@ -3,6 +3,9 @@ import { authOptions } from "@/lib/auth"
 import prisma from "@/lib/db"
 import { NextResponse } from "next/server"
 import { revalidateTag } from "next/cache"
+import { generateCertificatePDF } from "@/lib/certificate-generator"
+import { sendCertificateEmail } from "@/lib/email"
+import { getDownloadUrl } from "@/lib/r2"
 
 export async function POST(request, { params }) {
   try {
@@ -59,24 +62,19 @@ export async function POST(request, { params }) {
       return NextResponse.json({ error: "Course has no videos" }, { status: 400 })
     }
 
-    // Get all completed videos for this enrollment
-    const completedVideos = await prisma.videoProgress.findMany({
+    // Simple check: Get count of completed videos
+    const completedVideoCount = await prisma.videoProgress.count({
       where: {
         enrollmentId: enrollment.id,
         completed: true,
       },
-      select: {
-        videoId: true,
-      },
     })
-
-    const completedVideoCount = completedVideos.length
 
     // Check if all videos are completed
     if (completedVideoCount < totalVideos) {
       return NextResponse.json({
         completed: false,
-        message: `You have completed ${completedVideoCount} out of ${totalVideos} videos. Complete all videos to get your certificate.`,
+        message: `Complete all ${totalVideos} videos to get your certificate.`,
         completedVideos: completedVideoCount,
         totalVideos: totalVideos,
       })
@@ -100,7 +98,7 @@ export async function POST(request, { params }) {
       })
     }
 
-    // Create certificate
+    // Create certificate record first to get the ID
     const certificate = await prisma.certificate.create({
       data: {
         studentId: user.id,
@@ -118,10 +116,85 @@ export async function POST(request, { params }) {
         student: {
           select: {
             name: true,
+            email: true,
           },
         },
       },
     })
+
+    // Generate certificate PDF and upload to R2
+    let certificateUrl = null
+    let fileKey = null
+
+    try {
+      fileKey = await generateCertificatePDF({
+        studentName: user.name || user.email,
+        courseTitle: enrollment.course.title,
+        certificateId: certificate.id,
+        issuedAt: certificate.issuedAt,
+      })
+
+      console.log(`[Certificate] Generated PDF and uploaded to R2: ${fileKey}`)
+
+      // Generate presigned download URL (valid for 1 year)
+      try {
+        certificateUrl = await getDownloadUrl(fileKey, 31536000, `Certificate-${enrollment.course.title.replace(/[^a-zA-Z0-9]/g, "_")}.pdf`)
+        console.log(`[Certificate] Generated presigned URL for certificate ${certificate.id}`)
+      } catch (urlError) {
+        console.error("[Certificate] Error generating presigned URL (non-fatal):", urlError)
+        // Continue with fileKey - we can generate URL on-demand
+      }
+    } catch (error) {
+      console.error("[Certificate] Error generating PDF:", error)
+      // Continue with certificate creation even if PDF generation fails
+    }
+
+    // Update certificate with URL/file key
+    // Always store fileKey if available, even if presigned URL generation failed
+    // This allows us to generate a new presigned URL on-demand
+    const updatedCertificate = await prisma.certificate.update({
+      where: { id: certificate.id },
+      data: {
+        certificateUrl: fileKey || certificateUrl, // Prefer fileKey over presigned URL (presigned URLs expire)
+      },
+      include: {
+        course: {
+          select: {
+            title: true,
+            thumbnail: true,
+          },
+        },
+        student: {
+          select: {
+            name: true,
+            email: true,
+          },
+        },
+      },
+    })
+
+    // Send certificate email (non-blocking)
+    // Generate a fresh presigned URL for the email (if fileKey exists)
+    let emailCertificateUrl = certificateUrl
+    if (!emailCertificateUrl && fileKey) {
+      try {
+        emailCertificateUrl = await getDownloadUrl(fileKey, 31536000, `Certificate-${enrollment.course.title.replace(/[^a-zA-Z0-9]/g, "_")}.pdf`)
+      } catch (error) {
+        console.error("[Certificate] Error generating email URL:", error)
+      }
+    }
+
+    if (emailCertificateUrl && user.email) {
+      sendCertificateEmail({
+        to: user.email,
+        studentName: user.name || user.email,
+        courseTitle: enrollment.course.title,
+        certificateUrl: emailCertificateUrl,
+      }).catch((error) => {
+        console.error("[Certificate] Error sending email:", error)
+        // Don't fail the request if email fails
+      })
+    }
 
     // Invalidate cache
     revalidateTag(`student-${user.id}`)
@@ -130,7 +203,7 @@ export async function POST(request, { params }) {
 
     return NextResponse.json({
       completed: true,
-      certificate: certificate,
+      certificate: updatedCertificate,
       message: "Congratulations! You've completed the course and earned your certificate!",
     })
   } catch (error) {

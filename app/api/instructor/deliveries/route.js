@@ -5,15 +5,19 @@ import { authOptions } from "@/lib/auth"
 import { NextResponse } from "next/server"
 import { unstable_cache } from "next/cache"
 
-async function getDeliveriesData(instructorId, status, courseId) {
-  // Build where clause
+async function getDeliveriesData(userRole, userId, status, courseId) {
+  // Build where clause - ADMIN sees all, INSTRUCTOR sees only their courses
   const where = {
     enrollment: {
-      course: {
-        instructorId,
-      },
       status: "APPROVED",
     },
+  }
+
+  // Only filter by instructorId if user is INSTRUCTOR (not ADMIN)
+  if (userRole === "INSTRUCTOR") {
+    where.enrollment.course = {
+      instructorId: userId,
+    }
   }
 
   if (status) {
@@ -71,9 +75,11 @@ async function getDeliveriesData(instructorId, status, courseId) {
       by: ["status"],
       where: {
         enrollment: {
-          course: {
-            instructorId,
-          },
+          ...(userRole === "INSTRUCTOR" ? {
+            course: {
+              instructorId: userId,
+            },
+          } : {}),
           status: "APPROVED",
         },
       },
@@ -121,13 +127,16 @@ export async function GET(request) {
     const courseId = searchParams.get("courseId")
 
     // Cache deliveries data for 30 seconds
-    const cacheKey = `instructor-deliveries-${session.user.id}-${status || "all"}-${courseId || "all"}`
+    const cacheKey = session.user.role === "ADMIN"
+      ? `admin-deliveries-${status || "all"}-${courseId || "all"}`
+      : `instructor-deliveries-${session.user.id}-${status || "all"}-${courseId || "all"}`
+    
     const cachedGetDeliveriesData = unstable_cache(
-      () => getDeliveriesData(session.user.id, status, courseId),
+      () => getDeliveriesData(session.user.role, session.user.id, status, courseId),
       [cacheKey],
       {
         revalidate: 30,
-        tags: [`instructor-deliveries-${session.user.id}`],
+        tags: [session.user.role === "ADMIN" ? "admin-deliveries" : `instructor-deliveries-${session.user.id}`],
       }
     )
 

@@ -143,12 +143,13 @@ export default function ManageVideos() {
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push("/auth/signin")
-    } else if (
-      status === "authenticated" &&
-      session?.user?.role !== "INSTRUCTOR" &&
-      session?.user?.role !== "ADMIN"
-    ) {
-      router.push("/dashboard")
+    } else if (status === "authenticated") {
+      // Block ADMIN access - redirect to allowed page
+      if (session?.user?.role === "ADMIN") {
+        router.push("/instructor/enrollments/pending")
+      } else if (session?.user?.role !== "INSTRUCTOR") {
+        router.push("/dashboard")
+      }
     }
   }, [status, session, router])
 
@@ -172,7 +173,7 @@ export default function ManageVideos() {
       return await res.json()
     },
     enabled: !!params.id && status === "authenticated",
-    staleTime: 60 * 1000, // 60 seconds
+    staleTime: 5 * 1000, // 10 seconds
     onError: (error) => {
       toast({
         title: "Error",

@@ -234,8 +234,13 @@ export default function ManageLiveSessionsPage({ params }) {
   useEffect(() => {
     if (authStatus === "unauthenticated") {
       router.push("/auth/signin")
-    } else if (authStatus === "authenticated" && session?.user?.role !== "INSTRUCTOR") {
-      router.push("/")
+    } else if (authStatus === "authenticated") {
+      // Block ADMIN access - redirect to allowed page
+      if (session?.user?.role === "ADMIN") {
+        router.push("/instructor/enrollments/pending")
+      } else if (session?.user?.role !== "INSTRUCTOR") {
+        router.push("/")
+      }
     }
   }, [authStatus, session, router])
 

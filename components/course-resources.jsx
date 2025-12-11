@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 
-const ResourceItem = memo(({ resource, courseId, onDelete, onUpdate }) => {
+const ResourceItem = memo(({ resource, courseId, onDelete, onUpdate, canEdit = false }) => {
   const { toast } = useToast()
   const [isEditing, setIsEditing] = useState(false)
   const [editingTitle, setEditingTitle] = useState(resource.title)
@@ -228,28 +228,32 @@ const ResourceItem = memo(({ resource, courseId, onDelete, onUpdate }) => {
             </>
           )}
         </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setIsEditing(true)}
-          disabled={deleting}
-          className="btn-secondary"
-        >
-          <Edit className="h-3 w-3 sm:h-4 sm:w-4" />
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleDelete}
-          disabled={deleting}
-          className="btn-danger"
-        >
-          {deleting ? (
-            <Loader2 className="h-3 w-3 sm:h-4 sm:w-4 animate-spin" />
-          ) : (
-            <Trash2 className="h-3 w-3 sm:h-4 sm:w-4" />
-          )}
-        </Button>
+        {canEdit && (
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsEditing(true)}
+              disabled={deleting}
+              className="btn-secondary"
+            >
+              <Edit className="h-3 w-3 sm:h-4 sm:w-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleDelete}
+              disabled={deleting}
+              className="btn-danger"
+            >
+              {deleting ? (
+                <Loader2 className="h-3 w-3 sm:h-4 sm:w-4 animate-spin" />
+              ) : (
+                <Trash2 className="h-3 w-3 sm:h-4 sm:w-4" />
+              )}
+            </Button>
+          </>
+        )}
       </div>
     </div>
   )
@@ -257,7 +261,7 @@ const ResourceItem = memo(({ resource, courseId, onDelete, onUpdate }) => {
 
 ResourceItem.displayName = "ResourceItem"
 
-export default function CourseResources({ courseId, showUploader = false }) {
+export default function CourseResources({ courseId, showUploader = false, canEdit = false }) {
   const { toast } = useToast()
   const [resources, setResources] = useState([])
   const [loading, setLoading] = useState(true)
@@ -336,6 +340,7 @@ export default function CourseResources({ courseId, showUploader = false }) {
           courseId={courseId}
           onDelete={handleResourceDelete}
           onUpdate={handleResourceUpdate}
+          canEdit={canEdit}
         />
       ))}
     </div>

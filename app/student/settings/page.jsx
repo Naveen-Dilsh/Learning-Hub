@@ -262,21 +262,14 @@ export default function Settings() {
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
-        {/* Header */}
+        {/* Header Section */}
         <div className="mb-6 sm:mb-8">
-          <div className="flex items-center gap-3 sm:gap-4">
-            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-primary/10 rounded-xl flex items-center justify-center flex-shrink-0 border border-border">
-              <SettingsIcon className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <h1 className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-bold text-foreground">
-                Profile Settings
-              </h1>
-              <p className="text-muted-foreground mt-1 text-xs sm:text-sm md:text-base">
-                Manage your student profile and delivery address
-              </p>
-            </div>
-          </div>
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-foreground mb-2">
+            Profile Settings
+          </h1>
+          <p className="text-sm sm:text-base text-muted-foreground">
+            Manage your student profile and delivery address
+          </p>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8">

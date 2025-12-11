@@ -3,9 +3,10 @@
 import { useState, useCallback, useMemo } from "react"
 import { useToast } from "@/hooks/use-toast"
 import { Mail, Lock, ArrowRight, Eye, EyeOff, GraduationCap } from "lucide-react"
-import { signIn } from "next-auth/react"
+import { signIn, useSession } from "next-auth/react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
+import Image from "next/image"
 
 export default function SignIn() {
   const router = useRouter()
@@ -49,7 +50,20 @@ export default function SignIn() {
             title: "Welcome Back",
             description: "You have been signed in successfully.",
           })
-          router.push(callbackUrl)
+          
+          // Fetch session to get user role for redirect
+          const sessionResponse = await fetch("/api/auth/session")
+          const session = await sessionResponse.json()
+          const userRole = session?.user?.role
+
+          // Redirect based on user role
+          if (userRole === "ADMIN") {
+            router.push("/instructor/enrollments/pending")
+          } else if (userRole === "INSTRUCTOR") {
+            router.push("/instructor/dashboard")
+          } else {
+            router.push(callbackUrl)
+          }
         }
       } catch (err) {
         toast({
@@ -69,27 +83,46 @@ export default function SignIn() {
   }, [callbackUrl])
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4 sm:p-6 lg:p-8">
-      <div className="w-full max-w-5xl grid lg:grid-cols-2 gap-6 sm:gap-8 items-center">
+    <div className="h-screen bg-background flex items-center justify-center p-4 sm:p-6 lg:p-8 overflow-hidden">
+      <div className="w-full max-w-5xl grid lg:grid-cols-2 gap-8 lg:gap-12 items-stretch">
         {/* Left Side - Branding (Desktop Only) */}
-        <div className="hidden lg:block space-y-6 sm:space-y-8">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center shadow-lg">
-              <GraduationCap className="w-6 h-6 text-primary-foreground" />
+        <div className="hidden lg:flex flex-col justify-between">
+          {/* Top Section - Logo and Welcome */}
+          <div className="space-y-8">
+            {/* Logo */}
+            <div className="flex items-center gap-3">
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center shadow-xl">
+                <GraduationCap className="w-7 h-7 text-primary-foreground" />
+              </div>
+              <div>
+                <h1 className="text-3xl font-bold text-foreground tracking-tight">SmartLearn</h1>
+                <p className="text-sm text-muted-foreground font-medium mt-0.5">Learn. Discover. Excel.</p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-2xl font-bold text-foreground">SmartLearn</h1>
-              <p className="text-xs text-muted-foreground font-medium">Learn. Discover. Excel.</p>
+
+            {/* Welcome Section */}
+            <div className="space-y-4">
+              <h2 className="text-4xl xl:text-5xl font-bold leading-tight text-foreground">
+                Welcome Back
+              </h2>
+              <p className="text-base text-muted-foreground leading-relaxed max-w-sm">
+                Sign in to continue your learning journey and access all your courses.
+              </p>
             </div>
           </div>
 
-          <div className="space-y-4 sm:space-y-6">
-            <h2 className="text-2xl sm:text-3xl xl:text-4xl font-bold leading-tight text-foreground">
-              Welcome Back
-            </h2>
-            <p className="text-sm sm:text-base text-muted-foreground leading-relaxed">
-              Continue your learning journey and unlock new opportunities.
-            </p>
+          {/* GIF Section - Bottom aligned */}
+          <div className="flex items-end justify-start pt-4">
+            <div className="relative bg-muted-foreground dark:bg-transparent w-80 h-80 xl:w-96 xl:h-96 shadow-2xl dark:shadow-none rounded-2xl">
+              <Image
+                src="/images/signin-animation.gif"
+                alt="Learning animation"
+                fill
+                className="object-contain rounded-2xl"
+                unoptimized
+                priority={false}
+              />
+            </div>
           </div>
         </div>
 

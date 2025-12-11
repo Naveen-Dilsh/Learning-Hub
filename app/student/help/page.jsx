@@ -72,47 +72,42 @@ export default function Help() {
   ]
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 min-h-screen bg-background">
+    <div className="min-h-screen bg-background">
       {/* Header Section */}
-      <div className="mb-6 sm:mb-8 lg:mb-12">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-12 h-12 sm:w-14 sm:h-14 bg-gradient-to-br from-primary to-secondary rounded-xl flex items-center justify-center shadow-lg">
-            <HelpCircle className="w-6 h-6 sm:w-7 sm:h-7 text-white" />
-          </div>
-          <div>
-            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-foreground">
-              Help & Support
-            </h1>
-            <p className="text-sm sm:text-base text-muted-foreground mt-1">
-              Find answers to common questions and get assistance
-            </p>
-          </div>
-        </div>
+      <div className="px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8">
+        <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-foreground mb-2">
+          Help & Support
+        </h1>
+        <p className="text-sm sm:text-base text-muted-foreground">
+          Find answers to common questions and get assistance
+        </p>
       </div>
 
-      {/* Quick Links Section */}
-      <div className="mb-6 sm:mb-8">
-        <h2 className="text-lg sm:text-xl font-semibold text-foreground mb-4">Quick Links</h2>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
-          {quickLinks.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              className="bg-card rounded-xl border border-border p-4 sm:p-5 hover:shadow-md hover:border-primary/50 transition-all group"
-            >
-              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-primary/10 rounded-lg flex items-center justify-center mb-3 group-hover:bg-primary/20 transition">
-                <link.icon className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
-              </div>
-              <p className="text-xs sm:text-sm font-medium text-foreground group-hover:text-primary transition">
-                {link.label}
-              </p>
-            </Link>
-          ))}
+      {/* Content Section */}
+      <div className="max-w-[1600px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+        {/* Quick Links Section */}
+        <div className="mb-6 sm:mb-8">
+          <h2 className="text-lg sm:text-xl font-semibold text-foreground mb-4">Quick Links</h2>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+            {quickLinks.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                className="bg-card rounded-xl border border-border p-4 sm:p-5 hover:shadow-md hover:border-primary/50 transition-all group"
+              >
+                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-primary/10 rounded-lg flex items-center justify-center mb-3 group-hover:bg-primary/20 transition">
+                  <link.icon className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
+                </div>
+                <p className="text-xs sm:text-sm font-medium text-foreground group-hover:text-primary transition">
+                  {link.label}
+                </p>
+              </Link>
+            ))}
+          </div>
         </div>
-      </div>
 
-      {/* FAQ Section */}
-      <div className="mb-6 sm:mb-8">
+        {/* FAQ Section */}
+        <div className="mb-6 sm:mb-8">
         <h2 className="text-lg sm:text-xl font-semibold text-foreground mb-4 sm:mb-6">
           Frequently Asked Questions
         </h2>
@@ -218,6 +213,7 @@ export default function Help() {
             Access help articles and FAQs anytime from your dashboard.
           </p>
         </div>
+      </div>
       </div>
     </div>
   )

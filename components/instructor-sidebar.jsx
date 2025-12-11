@@ -33,7 +33,7 @@ export function InstructorSidebar() {
   const [hasViewedEnrollments, setHasViewedEnrollments] = useState(false)
   const [hasViewedDeliveries, setHasViewedDeliveries] = useState(false)
 
-  const menuItems = [
+  const allMenuItems = [
     { href: "/instructor/dashboard", label: "Dashboard", icon: LayoutDashboard, gradient: "from-primary to-accent" },
     { href: "/instructor/courses", label: "My Courses", icon: BookOpen, gradient: "from-accent to-primary" },
     { href: "/instructor/upload-videos", label: "Upload Videos", icon: Upload, gradient: "from-primary to-secondary" },
@@ -51,7 +51,7 @@ export function InstructorSidebar() {
     },
     // { href: "/instructor/earnings", label: "Earnings", icon: DollarSign, gradient: "from-secondary to-accent" },
     { href: "/instructor/students", label: "Students", icon: Users, gradient: "from-accent to-secondary" },
-    { href: "/instructor/analytics", label: "Analytics", icon: BarChart3, gradient: "from-primary to-accent" },
+    // { href: "/instructor/analytics", label: "Analytics", icon: BarChart3, gradient: "from-primary to-accent" },
     // { href: "/instructor/messages", label: "Messages", icon: MessageSquare, gradient: "from-secondary to-primary" },
     
     {
@@ -61,6 +61,21 @@ export function InstructorSidebar() {
       gradient: "from-muted-foreground to-foreground",
     },
   ]
+
+  // Filter menu items based on user role
+  // ADMIN users can only access: enrollments/pending, deliveries, students
+  const menuItems = useMemo(() => {
+    if (session?.user?.role === "ADMIN") {
+      const adminAllowedPaths = [
+        "/instructor/enrollments/pending",
+        "/instructor/deliveries",
+        "/instructor/students",
+      ]
+      return allMenuItems.filter((item) => adminAllowedPaths.includes(item.href))
+    }
+    // INSTRUCTOR users see all menu items
+    return allMenuItems
+  }, [session?.user?.role])
 
   const isActive = (href) => pathname === href
 

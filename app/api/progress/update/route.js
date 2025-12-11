@@ -8,7 +8,7 @@ const CREDITS_PER_VIDEO = 10 // Award 10 credits per completed video
 export async function POST(req) {
   try {
     const session = await getServerSession(authOptions)
-    console.log("huuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuu",session)
+    
     if (!session?.user?.email) {
       return Response.json({ error: "Unauthorized" }, { status: 401 })
     }
@@ -69,8 +69,6 @@ export async function POST(req) {
           },
         },
       })
-
-      console.log("[v0] Awarded", creditsAwarded, "credits to user", user.email)
     }
 
     const videoProgress = await prisma.videoProgress.upsert({
@@ -90,10 +88,9 @@ export async function POST(req) {
         videoId: videoId,
         completed: completed || false,
         completedAt: completed ? new Date() : null,
+        watchedAt: new Date(),
       },
     })
-
-    console.log("[v0] Progress updated successfully")
 
     // Invalidate student stats cache when progress is updated
     revalidateTag(`student-${user.id}`)

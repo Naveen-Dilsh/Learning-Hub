@@ -105,31 +105,16 @@ export default function LeaderboardPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <div className="bg-card/95 backdrop-blur-sm border-b border-border sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
-          <Link
-            href="/student"
-            className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground mb-3 sm:mb-4 font-medium transition-colors text-sm sm:text-base"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Back to Dashboard
-          </Link>
-          <div className="flex items-center gap-2 sm:gap-3">
-            <div className="p-2 sm:p-3 bg-primary/10 rounded-lg">
-              <TrendingUp className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
-            </div>
-            <div>
-              <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-foreground">Leaderboard</h1>
-              <p className="text-xs sm:text-sm text-muted-foreground mt-1">
-                Top learners ranked by credits earned
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+        {/* Header Section */}
+        <div className="mb-6 sm:mb-8">
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-foreground mb-2">
+            Leaderboard
+          </h1>
+          <p className="text-sm sm:text-base text-muted-foreground">
+            Top learners ranked by credits earned
+          </p>
+        </div>
         {/* Current User Stats */}
         {currentUserRank && (
           <div className="bg-gradient-to-r from-primary to-secondary rounded-xl p-4 sm:p-6 mb-6 sm:mb-8 text-primary-foreground shadow-lg">

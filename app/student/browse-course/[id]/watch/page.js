@@ -1,75 +1,63 @@
 "use client"
 
-import { useEffect, useState, useMemo, useCallback, memo } from "react"
+import { useEffect, useState, useMemo, useCallback, memo, useRef } from "react"
 import { useParams, useRouter } from 'next/navigation'
 import { useSession } from "next-auth/react"
-import { useQuery } from "@tanstack/react-query"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import VideoPlayer from "@/components/video-player"
 import Link from "next/link"
-import { CheckCircle, PlayCircle, Clock, Award, ArrowLeft, ChevronDown, ChevronUp, X, FileText, Loader2 } from "lucide-react"
+import { PlayCircle, Clock, Award, ArrowLeft, ChevronDown, ChevronUp, X, FileText } from "lucide-react"
 import LoadingBubbles from "@/components/loadingBubbles"
 import CourseResources from "@/components/course-resources"
 import { useToast } from "@/hooks/use-toast"
 
-// Certificate Celebration Modal - Memoized for performance
-const CertificateModal = memo(({ isOpen, onClose, courseName, courseId, onCertificateCreated }) => {
+// Simple Certificate Modal - Simplified
+const CertificateModal = memo(({ isOpen, onClose, courseName, courseId }) => {
   const { toast } = useToast()
-  const [isCreating, setIsCreating] = useState(false)
-  const [certificateCreated, setCertificateCreated] = useState(false)
-
-  const checkAndCreateCertificate = useCallback(async () => {
-    if (!courseId || isCreating || certificateCreated) return
-
-    setIsCreating(true)
-    try {
-      const res = await fetch(`/api/courses/${courseId}/complete`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-      })
-
-      const data = await res.json()
-
-      if (res.ok && data.completed) {
-        setCertificateCreated(true)
-        if (onCertificateCreated) {
-          onCertificateCreated(data.certificate)
-        }
-        toast({
-          title: "🎉 Certificate Earned!",
-          description: "Congratulations! You've completed the course and earned your certificate.",
-        })
-      } else if (!data.completed) {
-        toast({
-          variant: "destructive",
-          title: "Course Not Completed",
-          description: data.message || "Please complete all videos to earn your certificate.",
-        })
-      }
-    } catch (error) {
-      console.error("Error checking completion:", error)
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Failed to check course completion. Please try again.",
-      })
-    } finally {
-      setIsCreating(false)
-    }
-  }, [courseId, isCreating, certificateCreated, onCertificateCreated, toast])
+  const queryClient = useQueryClient()
 
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden'
-      // Check and create certificate when modal opens
-      checkAndCreateCertificate()
+      // Automatically generate certificate when modal opens
+      const generateCertificate = async () => {
+        try {
+          const res = await fetch(`/api/courses/${courseId}/complete`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+          })
+
+          const data = await res.json()
+
+          if (res.ok && data.completed) {
+            // Invalidate queries to refresh data
+            queryClient.invalidateQueries({ queryKey: ["enrollments"] })
+            queryClient.invalidateQueries({ queryKey: ["certificates"] })
+            queryClient.invalidateQueries({ queryKey: ["course", courseId] })
+            
+            toast({
+              title: "🎉 Certificate Earned!",
+              description: "Congratulations! Your certificate has been generated.",
+            })
+          }
+        } catch (error) {
+          console.error("Error generating certificate:", error)
+          toast({
+            variant: "destructive",
+            title: "Error",
+            description: "Failed to generate certificate. Please try again later.",
+          })
+        }
+      }
+
+      generateCertificate()
     } else {
       document.body.style.overflow = 'unset'
-      setCertificateCreated(false)
     }
     return () => {
       document.body.style.overflow = 'unset'
     }
-  }, [isOpen, checkAndCreateCertificate])
+  }, [isOpen, courseId, queryClient, toast])
 
   if (!isOpen) return null
 
@@ -77,8 +65,7 @@ const CertificateModal = memo(({ isOpen, onClose, courseName, courseId, onCertif
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-in fade-in duration-300">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose}></div>
       
-      <div className="relative bg-card rounded-2xl sm:rounded-3xl shadow-2xl max-w-lg w-full overflow-hidden animate-in zoom-in duration-300 border border-border">
-        {/* Close Button */}
+      <div className="relative bg-card rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden animate-in zoom-in duration-300 border border-border">
         <button
           onClick={onClose}
           className="absolute top-4 right-4 z-10 p-2 bg-card/80 hover:bg-card rounded-full transition-colors border border-border"
@@ -86,74 +73,32 @@ const CertificateModal = memo(({ isOpen, onClose, courseName, courseId, onCertif
           <X className="w-5 h-5 text-foreground" />
         </button>
 
-        {/* Animation Container */}
         <div className="relative bg-gradient-to-br from-primary/10 via-secondary/10 to-primary/10 p-8 pt-12">
           <div className="flex justify-center mb-6">
-            <div className="relative">
-              <div className="w-32 h-32 bg-gradient-to-br from-primary to-secondary rounded-full flex items-center justify-center animate-bounce shadow-lg">
-                <Award className="w-16 h-16 text-white" />
-              </div>
-              {/* Confetti effect */}
-              <div className="absolute inset-0 flex items-center justify-center">
-                {[...Array(8)].map((_, i) => (
-                  <div
-                    key={i}
-                    className="absolute w-2 h-2 bg-gradient-to-r from-primary to-secondary rounded-full animate-ping"
-                    style={{
-                      animationDelay: `${i * 0.1}s`,
-                      left: `${50 + Math.cos(i * Math.PI / 4) * 60}%`,
-                      top: `${50 + Math.sin(i * Math.PI / 4) * 60}%`,
-                    }}
-                  />
-                ))}
-              </div>
+            <div className="w-24 h-24 bg-gradient-to-br from-primary to-secondary rounded-full flex items-center justify-center shadow-lg">
+              <Award className="w-12 h-12 text-white" />
             </div>
           </div>
 
           <div className="text-center">
-            <h2 className="text-2xl sm:text-3xl font-bold text-foreground mb-2">
+            <h2 className="text-2xl font-bold text-foreground mb-2">
               🎉 Congratulations! 🎉
             </h2>
-            <p className="text-base sm:text-lg text-muted-foreground">
+            <p className="text-base text-muted-foreground mb-4">
               You've completed the course!
             </p>
+            <p className="text-sm font-semibold text-primary">{courseName}</p>
           </div>
         </div>
 
-        {/* Content */}
-        <div className="p-6 sm:p-8">
-          <div className="bg-gradient-to-br from-primary/10 to-secondary/10 rounded-xl sm:rounded-2xl p-6 mb-6 border-2 border-primary/20">
-            <h3 className="font-bold text-foreground mb-2 text-center text-lg">Course Completed</h3>
-            <p className="text-sm text-muted-foreground text-center mb-4">
-              {courseName}
-            </p>
-            <div className="flex items-center justify-center gap-2 text-primary font-semibold">
-              <CheckCircle className="w-5 h-5" />
-              <span>Certificate Ready!</span>
-            </div>
-          </div>
-
+        <div className="p-6">
           <div className="space-y-3">
-            {isCreating ? (
-              <div className="w-full py-4 px-6 rounded-xl font-bold text-center bg-muted text-muted-foreground flex items-center justify-center gap-2">
-                <Loader2 className="w-5 h-5 animate-spin" />
-                Creating Certificate...
-              </div>
-            ) : certificateCreated ? (
-              <Link
-                href={`/student/certificates`}
-                className="btn-primary w-full py-4 px-6 rounded-xl font-bold text-center block active:scale-[0.98]"
-              >
-                View Certificate
-              </Link>
-            ) : (
-              <button
-                onClick={checkAndCreateCertificate}
-                className="btn-primary w-full py-4 px-6 rounded-xl font-bold active:scale-[0.98]"
-              >
-                Get Certificate
-              </button>
-            )}
+            <Link
+              href={`/student/certificates`}
+              className="btn-primary w-full py-4 px-6 rounded-xl font-bold text-center block active:scale-[0.98]"
+            >
+              View Certificate
+            </Link>
             <Link
               href="/student/courses"
               className="bg-muted hover:bg-muted/80 text-foreground w-full py-4 px-6 rounded-xl font-bold text-center block transition active:scale-[0.98]"
@@ -221,6 +166,7 @@ VideoItem.displayName = "VideoItem"
 export default function WatchCourse() {
   const params = useParams()
   const router = useRouter()
+  const queryClient = useQueryClient()
   const { data: session, status: authStatus } = useSession()
   const [selectedVideoId, setSelectedVideoId] = useState(null)
   const [showContentSection, setShowContentSection] = useState(false)
@@ -235,7 +181,7 @@ export default function WatchCourse() {
     }
   }, [authStatus, router])
 
-  // Fetch course data with React Query
+  // Fetch course data with React Query - optimized
   const {
     data: course,
     isLoading,
@@ -251,8 +197,10 @@ export default function WatchCourse() {
       return await res.json()
     },
     enabled: !!params.id && authStatus !== "unauthenticated",
-    staleTime: 30 * 1000, // 30 seconds
+    staleTime: 60 * 1000, // 60 seconds - increased for better performance
+    gcTime: 5 * 60 * 1000, // 5 minutes garbage collection
     retry: 2,
+    refetchOnWindowFocus: false, // Don't refetch on window focus for better performance
   })
 
   // Set first video as selected when course loads
@@ -298,7 +246,7 @@ export default function WatchCourse() {
     }
   }, [currentIndex, course?.videos])
 
-  const handleNext = useCallback(async () => {
+  const handleNext = useCallback(() => {
     if (!course?.videos) return
     
     if (currentIndex < course.videos.length - 1) {
@@ -306,39 +254,12 @@ export default function WatchCourse() {
       setSelectedVideoId(course.videos[currentIndex + 1].id)
       window.scrollTo({ top: 0, behavior: 'smooth' })
     } else {
-      // Last video - check if course is completed and show certificate modal
-      try {
-        const res = await fetch(`/api/courses/${params.id}/complete`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-        })
-
-        const data = await res.json()
-
-        if (res.ok && data.completed) {
-          // Course is completed - show certificate modal
-          setShowCertificateModal(true)
-        } else {
-          // Not all videos completed yet
-          toast({
-            variant: "destructive",
-            title: "Course Not Completed",
-            description: data.message || "Please complete all videos to earn your certificate.",
-          })
-        }
-      } catch (error) {
-        console.error("Error checking completion:", error)
-        // Still show modal even if check fails
-        setShowCertificateModal(true)
-      }
+      // Last video completed - simply show certificate modal
+      // Certificate will be generated automatically when modal opens
+      setShowCertificateModal(true)
     }
-  }, [currentIndex, course?.videos, params.id, toast])
+  }, [currentIndex, course?.videos])
 
-  const handleCertificateCreated = useCallback((certificate) => {
-    // Invalidate queries to refresh data
-    // This will be handled by React Query if needed
-    console.log("Certificate created:", certificate)
-  }, [])
 
   // Loading state
   if (isLoading || authStatus === "loading" || !session?.user?.id) {
@@ -353,12 +274,12 @@ export default function WatchCourse() {
           <p className="text-destructive font-semibold mb-4 text-lg">
             {error?.message || "Failed to load course"}
           </p>
-          <Link 
+          {/* <Link 
             href="/student" 
             className="btn-primary inline-block px-6 py-3 rounded-lg"
           >
             Back to Dashboard
-          </Link>
+          </Link> */}
         </div>
       </div>
     )
@@ -372,50 +293,36 @@ export default function WatchCourse() {
         onClose={() => setShowCertificateModal(false)}
         courseName={course.title}
         courseId={course.id}
-        onCertificateCreated={handleCertificateCreated}
       />
-
-      {/* Sticky Header */}
-      <div className="bg-card border-b border-border shadow-sm sticky top-0 z-40">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between gap-4">
-            <Link 
-              href="/student"
-              className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground font-medium transition-colors"
-            >
-              <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" />
-              <span className="hidden sm:inline">Back to Dashboard</span>
-              <span className="sm:hidden">Back</span>
-            </Link>
-            
-            {/* Progress Indicator */}
-            <div className="flex items-center gap-3 flex-1 max-w-xs">
-              <span className="text-xs sm:text-sm font-semibold text-muted-foreground whitespace-nowrap">
-                {currentIndex + 1}/{course.videos.length}
-              </span>
-              <div className="flex-1 bg-muted rounded-full h-2">
-                <div 
-                  className="bg-gradient-to-r from-primary to-secondary h-2 rounded-full transition-all"
-                  style={{ width: `${progressPercentage}%` }}
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
 
       {/* Main Content - Single Column */}
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-10">
-        <div className="space-y-6 sm:space-y-8">
-          {/* Course Info Header */}
-          <div className="bg-card rounded-xl sm:rounded-2xl border border-border p-4 sm:p-6">
-            <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-foreground mb-2">
-              {course.title}
-            </h1>
-            <p className="text-sm sm:text-base text-muted-foreground flex items-center gap-2">
-              By <span className="font-semibold text-primary">{course.instructor.name}</span>
-            </p>
+        {/* Header Section */}
+        <div className="mb-6 sm:mb-8">
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-foreground mb-2">
+            {course.title}
+          </h1>
+          <p className="text-sm sm:text-base text-muted-foreground mb-4">
+            By <span className="font-semibold text-primary">{course.instructor.name}</span>
+          </p>
+          {/* Progress Indicator */}
+          <div className="flex items-center gap-3">
+            <span className="text-xs sm:text-sm font-semibold text-muted-foreground whitespace-nowrap">
+              Lesson {currentIndex + 1} of {course.videos.length}
+            </span>
+            <div className="flex-1 bg-muted rounded-full h-2">
+              <div 
+                className="bg-gradient-to-r from-primary to-secondary h-2 rounded-full transition-all"
+                style={{ width: `${progressPercentage}%` }}
+              />
+            </div>
+            <span className="text-xs sm:text-sm font-semibold text-muted-foreground whitespace-nowrap">
+              {Math.round(progressPercentage)}%
+            </span>
           </div>
+        </div>
+
+        <div className="space-y-6 sm:space-y-8">
 
           {/* Video Player Section */}
           <div className="bg-card rounded-xl sm:rounded-2xl shadow-lg border border-border overflow-hidden">
@@ -541,7 +448,7 @@ export default function WatchCourse() {
 
             {showResourcesSection && (
               <div className="border-t border-border p-4 sm:p-6">
-                <CourseResources courseId={params.id} showUploader={false} />
+                <CourseResources courseId={params.id} showUploader={false} canEdit={false} />
               </div>
             )}
           </div>
