@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { NextResponse } from "next/server"
 import { revalidatePath } from "next/cache"
+import { deleteVideoFromCloudflare } from "@/lib/cloudflare-stream"
 
 export async function PUT(request, { params }) {
   const routeTimer = performanceLogger.startTimer('PUT /api/courses/[id]/videos/[videoId]')
@@ -218,10 +219,14 @@ export async function DELETE(request, { params }) {
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
     }
 
+    // Await params for Next.js 15+ compatibility
+    const resolvedParams = await params
+
     const video = await prisma.video.findUnique({
-      where: { id: params.videoId },
+      where: { id: resolvedParams.videoId },
       select: {
         id: true,
+        cloudflareStreamId: true,
         course: {
           select: {
             id: true,
@@ -241,21 +246,42 @@ export async function DELETE(request, { params }) {
       return NextResponse.json({ message: "Forbidden" }, { status: 403 })
     }
 
+    // Delete video from Cloudflare Stream first (if cloudflareStreamId exists)
+    if (video.cloudflareStreamId) {
+      const accountId = process.env.CLOUDFLARE_ACCOUNT_ID
+      const apiToken = process.env.CLOUDFLARE_API_TOKEN
+
+      if (accountId && apiToken) {
+        try {
+          await deleteVideoFromCloudflare(video.cloudflareStreamId, accountId, apiToken)
+          console.log("[v0] Successfully deleted video from Cloudflare Stream:", video.cloudflareStreamId)
+        } catch (cloudflareError) {
+          // Log error but continue with database deletion
+          // This prevents database orphan records if Cloudflare deletion fails
+          console.error("[v0] Failed to delete video from Cloudflare Stream (continuing with DB deletion):", cloudflareError.message)
+          // Don't throw - we still want to delete from database even if Cloudflare deletion fails
+        }
+      } else {
+        console.warn("[v0] Cloudflare credentials not configured, skipping Cloudflare Stream deletion")
+      }
+    }
+
+    // Delete from database
     await prisma.video.delete({
-      where: { id: params.videoId },
+      where: { id: resolvedParams.videoId },
     })
 
     // Invalidate cache
-    revalidatePath(`/api/courses/${params.id}`)
-    revalidatePath(`/api/courses/${params.id}/videos`)
+    revalidatePath(`/api/courses/${resolvedParams.id}`)
+    revalidatePath(`/api/courses/${resolvedParams.id}/videos`)
 
     const dbTime = dbTimer.stop()
     const totalTime = routeTimer.stop()
 
-    performanceLogger.logAPIRoute('DELETE', `/api/courses/${params.id}/videos/${params.videoId}`, totalTime, {
+    performanceLogger.logAPIRoute('DELETE', `/api/courses/${resolvedParams.id}/videos/${resolvedParams.videoId}`, totalTime, {
       status: 200,
       dbTime,
-      videoId: params.videoId,
+      videoId: resolvedParams.videoId,
     })
 
     return NextResponse.json({ message: "Video deleted successfully" })

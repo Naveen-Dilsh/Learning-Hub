@@ -180,6 +180,15 @@ export async function POST(request) {
       return NextResponse.json({
         success: true,
         message: "Payment verified and enrollment activated successfully!",
+        courseId: payment.courseId,
+        payment: {
+          id: payment.id,
+          courseId: payment.courseId,
+          course: {
+            id: payment.course.id,
+            title: payment.course.title,
+          },
+        },
       })
     }
 

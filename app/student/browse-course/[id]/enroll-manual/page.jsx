@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useMemo } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter, useParams, useSearchParams } from "next/navigation"
-import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { useToast } from "@/hooks/use-toast"
 import Link from "next/link"
 import ImageUpload from "@/components/image-upload"
@@ -17,8 +17,6 @@ export default function ManualEnrollment() {
   const searchParams = useSearchParams()
   const { toast } = useToast()
   const queryClient = useQueryClient()
-  const [course, setCourse] = useState(null)
-  const [loading, setLoading] = useState(true)
   const [receiptImage, setReceiptImage] = useState("")
 
   // Get requiresDelivery from URL params (set on purchase page)
@@ -26,8 +24,75 @@ export default function ManualEnrollment() {
     searchParams.get('requiresDelivery') === 'true', 
     [searchParams]
   )
-  const [userProfile, setUserProfile] = useState(null)
-  const [hasAddress, setHasAddress] = useState(false)
+
+  // Query for course data
+  const {
+    data: course,
+    isLoading: courseLoading,
+    isError: courseError,
+    error: courseErrorData,
+  } = useQuery({
+    queryKey: ["course", params.id],
+    queryFn: async () => {
+      const res = await fetch(`/api/courses/${params.id}`, {
+        cache: "no-store",
+      })
+      
+      if (!res.ok) {
+        let errorMessage = "Failed to fetch course"
+        try {
+          const errorData = await res.json()
+          errorMessage = errorData.message || errorData.error || errorMessage
+        } catch (parseError) {
+          errorMessage = res.statusText || errorMessage
+        }
+        throw new Error(errorMessage)
+      }
+      
+      return await res.json()
+    },
+    enabled: !!params.id,
+    staleTime: 60 * 1000, // 60 seconds
+    onError: (error) => {
+      toast({
+        variant: "destructive",
+        title: "Error Loading Course",
+        description: error.message || "Failed to load course. Please try again.",
+      })
+    },
+  })
+
+  // Query for user profile
+  const {
+    data: userProfile,
+    isLoading: profileLoading,
+  } = useQuery({
+    queryKey: ["userProfile", session?.user?.id],
+    queryFn: async () => {
+      const res = await fetch("/api/user/profile", {
+        cache: "no-store",
+      })
+      
+      if (!res.ok) {
+        throw new Error("Failed to fetch profile")
+      }
+      
+      return await res.json()
+    },
+    enabled: !!session?.user?.id,
+    staleTime: 30 * 1000, // 30 seconds
+  })
+
+  // Compute hasAddress from userProfile
+  const hasAddress = useMemo(
+    () => Boolean(
+      userProfile?.phone?.trim() &&
+      userProfile?.addressLine1?.trim() && 
+      userProfile?.city?.trim() && 
+      userProfile?.district?.trim()
+    ),
+    [userProfile?.phone, userProfile?.addressLine1, userProfile?.city, userProfile?.district]
+  )
 
   // Mutation for manual enrollment
   const enrollmentMutation = useMutation({
@@ -62,9 +127,10 @@ export default function ManualEnrollment() {
       return data
     },
     onSuccess: () => {
-      // Invalidate queries to refetch data
-      queryClient.invalidateQueries({ queryKey: ["payments"] })
-      queryClient.invalidateQueries({ queryKey: ["enrollments"] })
+      // Refetch queries to get fresh data immediately
+      queryClient.invalidateQueries({ queryKey: ["payments"],exact: false  })
+      queryClient.invalidateQueries({ queryKey: ["enrollments"],exact: false  })
+      console.log("invalidated payments", session.user.id)
       
       toast({
         title: "Request Submitted",
@@ -88,10 +154,9 @@ export default function ManualEnrollment() {
   // Memoized computed values
   const isSubmitDisabled = useMemo(() => 
     enrollmentMutation.isPending || 
-    enrollmentMutation.isLoading || 
     !receiptImage || 
     (requiresDelivery && !hasAddress),
-    [enrollmentMutation.isPending, enrollmentMutation.isLoading, receiptImage, requiresDelivery, hasAddress]
+    [enrollmentMutation.isPending, receiptImage, requiresDelivery, hasAddress]
   )
 
   useEffect(() => {
@@ -100,58 +165,13 @@ export default function ManualEnrollment() {
     }
   }, [status, router])
 
-  const fetchCourse = useCallback(async () => {
-    try {
-      const res = await fetch(`/api/courses/${params.id}`, {
-        next: { revalidate: 60 }
-      })
-      if (!res.ok) {
-        let errorMessage = "Failed to fetch course"
-        try {
-          const errorData = await res.json()
-          errorMessage = errorData.message || errorData.error || errorMessage
-        } catch (parseError) {
-          errorMessage = res.statusText || errorMessage
-        }
-        throw new Error(errorMessage)
-      }
-      const data = await res.json()
-      setCourse(data)
-    } catch (err) {
-      toast({
-        variant: "destructive",
-        title: "Error Loading Course",
-        description: err.message || "Failed to load course. Please try again.",
-      })
-    } finally {
-      setLoading(false)
-    }
-  }, [params.id, toast])
-
-  const fetchUserProfile = useCallback(async () => {
-    try {
-      const res = await fetch("/api/user/profile")
-      if (res.ok) {
-        const data = await res.json()
-        setUserProfile(data)
-        setHasAddress(Boolean(data.phone && data.addressLine1 && data.city && data.district))
-      }
-    } catch (error) {
-      console.error("Error fetching profile:", error)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (params.id) {
-      fetchCourse()
-    }
-    if (session?.user) {
-      fetchUserProfile()
-    }
-  }, [params.id, session, fetchCourse, fetchUserProfile])
-
   const handleSubmit = useCallback(async (e) => {
     e.preventDefault()
+
+    // Prevent multiple submissions
+    if (enrollmentMutation.isPending) {
+      return
+    }
 
     // Validate address if delivery is required
     if (requiresDelivery && !hasAddress) {
@@ -179,7 +199,7 @@ export default function ManualEnrollment() {
     })
   }, [requiresDelivery, hasAddress, receiptImage, params.id, enrollmentMutation, toast])
 
-  if (loading) {
+  if (courseLoading || profileLoading || status === "loading" || !session?.user?.id) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background">
         <LoadingBubbles/>
@@ -246,13 +266,20 @@ export default function ManualEnrollment() {
                     <MapPin className="w-4 h-4 text-primary flex-shrink-0" />
                     Delivery Address
                   </div>
-                  <div className="text-xs sm:text-sm text-muted-foreground space-y-1 pl-6">
-                    <p className="font-medium text-foreground">{userProfile?.name}</p>
+                  <div className="text-xs sm:text-sm text-foreground space-y-1 pl-6">
+                    {userProfile?.name && (
+                      <p className="font-semibold text-foreground">{userProfile.name}</p>
+                    )}
                     <p>{userProfile?.addressLine1}</p>
-                    {userProfile?.addressLine2 && <p>{userProfile?.addressLine2}</p>}
+                    {userProfile?.addressLine2 && <p>{userProfile.addressLine2}</p>}
                     <p>{userProfile?.city}, {userProfile?.district}</p>
-                    {userProfile?.postalCode && <p>Postal Code: {userProfile?.postalCode}</p>}
-                    <p>Phone: {userProfile?.phone}</p>
+                    {userProfile?.postalCode && (
+                      <p className="text-muted-foreground">Postal Code: {userProfile.postalCode}</p>
+                    )}
+                    <p className="text-muted-foreground">{userProfile?.country || "Sri Lanka"}</p>
+                    {userProfile?.phone && (
+                      <p className="text-muted-foreground mt-2">Phone: {userProfile.phone}</p>
+                    )}
                   </div>
                   <Link 
                     href="/student/settings" 

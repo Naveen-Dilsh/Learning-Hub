@@ -3,6 +3,7 @@
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { useState, useEffect, useCallback, useMemo } from "react"
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { useToast } from "@/hooks/use-toast"
 import ImageUpload from "@/components/image-upload"
 import LoadingBubbles from "@/components/loadingBubbles"
@@ -11,6 +12,7 @@ import {
   Edit2,
   Save,
   X,
+  Settings,
   Mail,
   Phone,
   MapPin,
@@ -53,7 +55,7 @@ export default function ProfileSettings() {
   const { data: session, status: authStatus, update } = useSession()
   const router = useRouter()
   const { toast } = useToast()
-  const [profileData, setProfileData] = useState(null)
+  const queryClient = useQueryClient()
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -67,21 +69,29 @@ export default function ProfileSettings() {
     country: "Sri Lanka",
     createdAt: "",
   })
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
 
   useEffect(() => {
     if (authStatus === "unauthenticated") {
       router.push("/auth/signin")
-    } else if (session?.user?.role !== "INSTRUCTOR" && session?.user?.role !== "ADMIN") {
-      router.push("/")
+    } else if (authStatus === "authenticated") {
+      // Block ADMIN access - redirect to allowed page
+      if (session?.user?.role === "ADMIN") {
+        router.push("/instructor/enrollments/pending")
+      } else if (session?.user?.role !== "INSTRUCTOR") {
+        router.push("/")
+      }
     }
   }, [authStatus, session, router])
 
-  const fetchProfile = useCallback(async () => {
-    try {
-      setLoading(true)
+  const {
+    data: profileData,
+    isLoading,
+    isError,
+    error,
+  } = useQuery({
+    queryKey: ["userProfile", session?.user?.id],
+    queryFn: async () => {
       const res = await fetch("/api/user/profile", {
         cache: "no-store",
       })
@@ -91,37 +101,37 @@ export default function ProfileSettings() {
         throw new Error(errorData.message || "Failed to fetch profile")
       }
 
-      const data = await res.json()
-      setProfileData(data)
-      setFormData({
-        name: data.name || "",
-        email: data.email || "",
-        image: data.image || "",
-        phone: data.phone || "",
-        addressLine1: data.addressLine1 || "",
-        addressLine2: data.addressLine2 || "",
-        city: data.city || "",
-        district: data.district || "",
-        postalCode: data.postalCode || "",
-        country: data.country || "Sri Lanka",
-        createdAt: data.createdAt || "",
-      })
-    } catch (error) {
+      return await res.json()
+    },
+    enabled: !!session?.user?.id,
+    staleTime: 60 * 1000, // 60 seconds
+    onError: (error) => {
       toast({
         variant: "destructive",
         title: "Error Loading Profile",
         description: error.message || "Failed to load profile. Please try again.",
       })
-    } finally {
-      setLoading(false)
-    }
-  }, [toast])
+    },
+  })
 
+  // Update form data when profile data loads
   useEffect(() => {
-    if (session?.user?.id) {
-      fetchProfile()
+    if (profileData) {
+      setFormData({
+        name: profileData.name || "",
+        email: profileData.email || "",
+        image: profileData.image || "",
+        phone: profileData.phone || "",
+        addressLine1: profileData.addressLine1 || "",
+        addressLine2: profileData.addressLine2 || "",
+        city: profileData.city || "",
+        district: profileData.district || "",
+        postalCode: profileData.postalCode || "",
+        country: profileData.country || "Sri Lanka",
+        createdAt: profileData.createdAt || "",
+      })
     }
-  }, [session, fetchProfile])
+  }, [profileData])
 
   const handleChange = useCallback((e) => {
     const { name, value } = e.target
@@ -155,63 +165,87 @@ export default function ProfileSettings() {
     setIsEditing(false)
   }, [profileData])
 
+  const updateProfileMutation = useMutation({
+    mutationFn: async (data) => {
+      const res = await fetch("/api/user/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      })
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}))
+        throw new Error(errorData.message || "Failed to update profile")
+      }
+
+      return await res.json()
+    },
+    onSuccess: async (updatedUser) => {
+      await update({
+        name: updatedUser.name,
+        image: updatedUser.image,
+      })
+
+      // Update formData immediately with the updated data
+      setFormData((prev) => ({
+        ...prev,
+        name: updatedUser.name || prev.name,
+        image: updatedUser.image || prev.image,
+        phone: updatedUser.phone || prev.phone,
+        addressLine1: updatedUser.addressLine1 || prev.addressLine1,
+        addressLine2: updatedUser.addressLine2 || prev.addressLine2,
+        city: updatedUser.city || prev.city,
+        district: updatedUser.district || prev.district,
+        postalCode: updatedUser.postalCode || prev.postalCode,
+        country: updatedUser.country || prev.country,
+      }))
+
+      // Invalidate and refetch profile to ensure data consistency
+      await queryClient.invalidateQueries({ queryKey: ["userProfile", session?.user?.id] })
+      await queryClient.refetchQueries({ queryKey: ["userProfile", session?.user?.id] })
+
+      setIsEditing(false)
+
+      toast({
+        title: "Profile Updated",
+        description: "Your profile has been updated successfully.",
+      })
+    },
+    onError: (error) => {
+      toast({
+        variant: "destructive",
+        title: "Error Updating Profile",
+        description: error.message || "Failed to update profile. Please try again.",
+      })
+    },
+  })
+
   const handleSubmit = useCallback(
     async (e) => {
       e.preventDefault()
-      setSaving(true)
-
-      try {
-        const res = await fetch("/api/user/profile", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: formData.name,
-            image: formData.image,
-            phone: formData.phone,
-            addressLine1: formData.addressLine1,
-            addressLine2: formData.addressLine2,
-            city: formData.city,
-            district: formData.district,
-            postalCode: formData.postalCode,
-            country: formData.country,
-          }),
-        })
-
-        if (!res.ok) {
-          const errorData = await res.json().catch(() => ({}))
-          throw new Error(errorData.message || "Failed to update profile")
-        }
-
-        const updatedUser = await res.json()
-        await update({
-          name: updatedUser.name,
-          image: updatedUser.image,
-        })
-
-        setProfileData(updatedUser)
-        setIsEditing(false)
-
-        toast({
-          title: "Profile Updated",
-          description: "Your profile has been updated successfully.",
-        })
-      } catch (error) {
-        toast({
-          variant: "destructive",
-          title: "Error Updating Profile",
-          description: error.message || "Failed to update profile. Please try again.",
-        })
-      } finally {
-        setSaving(false)
-      }
+      updateProfileMutation.mutate({
+        name: formData.name,
+        image: formData.image,
+        phone: formData.phone,
+        addressLine1: formData.addressLine1,
+        addressLine2: formData.addressLine2,
+        city: formData.city,
+        district: formData.district,
+        postalCode: formData.postalCode,
+        country: formData.country,
+      })
     },
-    [formData, update, toast]
+    [formData, updateProfileMutation]
   )
 
   // Memoized computed values
   const hasCompleteAddress = useMemo(
-    () => Boolean(formData.phone && formData.addressLine1 && formData.city && formData.district),
-    [formData]
+    () => Boolean(
+      formData.addressLine1?.trim() && 
+      formData.city?.trim() && 
+      formData.district?.trim()
+    ),
+    [formData.addressLine1, formData.city, formData.district]
   )
 
   const memberSince = useMemo(() => {
@@ -223,24 +257,33 @@ export default function ProfileSettings() {
   }, [formData.createdAt])
 
   // Get instructor stats
-  const [instructorStats, setInstructorStats] = useState({ totalCourses: 0, totalStudents: 0 })
-  useEffect(() => {
-    if (session?.user?.id) {
-      fetch(`/api/instructor/dashboard?instructorId=${session.user.id}`)
-        .then((res) => res.json())
-        .then((data) => {
-          if (data.stats) {
-            setInstructorStats({
-              totalCourses: data.stats.totalCourses || 0,
-              totalStudents: data.stats.totalStudents || 0,
-            })
-          }
-        })
-        .catch(() => {})
-    }
-  }, [session])
+  const {
+    data: dashboardData,
+  } = useQuery({
+    queryKey: ["instructorDashboard", session?.user?.id],
+    queryFn: async () => {
+      if (!session?.user?.id) return { stats: {} }
+      
+      const res = await fetch(`/api/instructor/dashboard?instructorId=${session.user.id}`, {
+        cache: "no-store",
+      })
+      
+      if (!res.ok) {
+        throw new Error("Failed to fetch dashboard data")
+      }
+      
+      return await res.json()
+    },
+    enabled: !!session?.user?.id,
+    staleTime: 60 * 1000, // 60 seconds
+  })
 
-  if (authStatus === "loading" || loading) {
+  const instructorStats = useMemo(() => ({
+    totalCourses: dashboardData?.stats?.totalCourses || 0,
+    totalStudents: dashboardData?.stats?.totalStudents || 0,
+  }), [dashboardData])
+
+  if (authStatus === "loading" || isLoading || !session?.user?.id) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background">
         <LoadingBubbles />
@@ -250,17 +293,23 @@ export default function ProfileSettings() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <div className="bg-card/95 backdrop-blur-sm border-b border-border sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
-          <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Profile Settings</h1>
-          <p className="text-sm sm:text-base text-muted-foreground mt-1">
-            Manage your instructor profile and contact information
-          </p>
-        </div>
-      </div>
-
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+        {/* Header */}
+        <div className="mb-6 sm:mb-8">
+          <div className="flex items-center gap-3 sm:gap-4">
+            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-primary/10 rounded-xl flex items-center justify-center flex-shrink-0 border border-border">
+              <Settings className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h1 className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-bold text-foreground">
+                Profile Settings
+              </h1>
+              <p className="text-muted-foreground mt-1 text-xs sm:text-sm md:text-base">
+                Manage your instructor profile and contact information
+              </p>
+            </div>
+          </div>
+        </div>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8">
           {/* Profile Card - Left Sidebar */}
           <div className="lg:col-span-1">
@@ -376,24 +425,36 @@ export default function ProfileSettings() {
                   </h3>
                   {hasCompleteAddress ? (
                     <div className="space-y-2 sm:space-y-3">
-                      <p className="text-sm sm:text-base text-foreground font-medium">{formData.name}</p>
-                      <p className="text-sm sm:text-base text-foreground">{formData.addressLine1}</p>
-                      {formData.addressLine2 && (
-                        <p className="text-sm sm:text-base text-foreground">{formData.addressLine2}</p>
-                      )}
-                      <p className="text-sm sm:text-base text-foreground">
-                        {formData.city}, {formData.district}
-                      </p>
-                      {formData.postalCode && (
-                        <p className="text-sm sm:text-base text-foreground">
-                          Postal Code: {formData.postalCode}
-                        </p>
-                      )}
-                      <p className="text-sm sm:text-base text-foreground">{formData.country}</p>
+                      <div className="flex items-start gap-3">
+                        <User className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
+                        <p className="text-sm sm:text-base text-foreground font-semibold">{formData.name}</p>
+                      </div>
+                      <div className="flex items-start gap-3">
+                        <MapPin className="w-5 h-5 text-muted-foreground mt-0.5 flex-shrink-0" />
+                        <div className="flex-1 min-w-0 space-y-1">
+                          <p className="text-sm sm:text-base text-foreground">{formData.addressLine1}</p>
+                          {formData.addressLine2 && (
+                            <p className="text-sm sm:text-base text-foreground">{formData.addressLine2}</p>
+                          )}
+                          <p className="text-sm sm:text-base text-foreground">
+                            {formData.city}, {formData.district}
+                          </p>
+                          {formData.postalCode && (
+                            <p className="text-sm sm:text-base text-foreground">
+                              Postal Code: {formData.postalCode}
+                            </p>
+                          )}
+                          <p className="text-sm sm:text-base text-foreground">{formData.country}</p>
+                        </div>
+                      </div>
                       {formData.phone && (
-                        <p className="text-sm sm:text-base text-muted-foreground mt-3">
-                          Phone: {formData.phone}
-                        </p>
+                        <div className="flex items-start gap-3 pt-2 border-t border-border">
+                          <Phone className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs text-muted-foreground mb-1">Phone</p>
+                            <p className="text-sm sm:text-base text-foreground">{formData.phone}</p>
+                          </div>
+                        </div>
                       )}
                     </div>
                   ) : (
@@ -461,15 +522,20 @@ export default function ProfileSettings() {
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-foreground mb-2">Phone Number</label>
+                      <label className="block text-sm font-medium text-foreground mb-2">
+                        Phone Number <span className="text-muted-foreground text-xs">(Optional)</span>
+                      </label>
                       <input
                         type="tel"
                         name="phone"
                         value={formData.phone}
                         onChange={handleChange}
-                        placeholder="07XXXXXXXX"
-                        className="w-full px-4 py-2.5 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary bg-background text-foreground"
+                        placeholder="07XXXXXXXX (e.g., 0771234567)"
+                        className="w-full px-4 py-2.5 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary bg-background text-foreground placeholder:text-muted-foreground/50"
                       />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Enter your phone number for better communication
+                      </p>
                     </div>
 
                     {/* Contact Address Section */}
@@ -574,10 +640,10 @@ export default function ProfileSettings() {
 
                     <button
                       type="submit"
-                      disabled={saving}
+                      disabled={updateProfileMutation.isPending}
                       className="btn-primary w-full inline-flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-semibold disabled:opacity-50"
                     >
-                      {saving ? (
+                      {updateProfileMutation.isPending ? (
                         <>
                           <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin"></div>
                           Saving...

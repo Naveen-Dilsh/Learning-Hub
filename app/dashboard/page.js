@@ -16,8 +16,12 @@ export default function Dashboard() {
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push("/auth/signin")
-    } else if (status === "authenticated" && session?.user?.role === "INSTRUCTOR") {
-      router.push("/instructor/dashboard")
+    } else if (status === "authenticated") {
+      if (session?.user?.role === "INSTRUCTOR") {
+        router.push("/instructor/dashboard")
+      } else if (session?.user?.role === "ADMIN") {
+        router.push("/instructor/enrollments/pending")
+      }
     }
   }, [status, session, router])
 

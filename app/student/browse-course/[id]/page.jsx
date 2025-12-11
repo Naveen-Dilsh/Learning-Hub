@@ -1,8 +1,9 @@
 "use client"
 
-import { useEffect, useState, useMemo, useCallback, memo } from "react"
+import { useState, useMemo, useEffect, memo } from "react"
 import { useParams, useRouter } from 'next/navigation'
 import { useSession } from "next-auth/react"
+import { useQuery } from "@tanstack/react-query"
 import Link from "next/link"
 import VideoPlayer from "@/components/video-player"
 import { PlayCircle, Users, Video, Clock, ChevronLeft, Lock, User, CheckCircle } from "lucide-react"
@@ -84,11 +85,43 @@ CourseLessonItem.displayName = 'CourseLessonItem'
 export default function CourseDetailsPage() {
   const params = useParams()
   const router = useRouter()
-  const { data: session } = useSession()
-  const [course, setCourse] = useState(null)
-  const [isEnrolled, setIsEnrolled] = useState(false)
-  const [loading, setLoading] = useState(true)
+  const { data: session, status: authStatus } = useSession()
   const [selectedVideo, setSelectedVideo] = useState(null)
+
+  // Fetch course details
+  const {
+    data: course,
+    isLoading: courseLoading,
+    isError: courseError,
+  } = useQuery({
+    queryKey: ["course", params.id],
+    queryFn: async () => {
+      const res = await fetch(`/api/courses/${params.id}`, {
+        cache: "no-store",
+      })
+      if (!res.ok) throw new Error("Failed to fetch course")
+      return await res.json()
+    },
+    enabled: !!params.id,
+    staleTime: 30 * 1000, // 30 seconds
+  })
+
+  // Check enrollment status
+  const {
+    data: enrollmentData,
+    isLoading: enrollmentLoading,
+  } = useQuery({
+    queryKey: ["enrollment-check", params.id, session?.user?.id],
+    queryFn: async () => {
+      const res = await fetch(`/api/enrollments/check?courseId=${params.id}`)
+      if (!res.ok) return { enrolled: false }
+      return await res.json()
+    },
+    enabled: !!params.id && !!session?.user?.id,
+    staleTime: 30 * 1000, // 30 seconds
+  })
+
+  const isEnrolled = enrollmentData?.enrolled || false
 
   // Memoized free videos
   const freeVideos = useMemo(() => 
@@ -96,54 +129,19 @@ export default function CourseDetailsPage() {
     [course]
   )
 
-  // Memoized fetch functions
-  const fetchCourse = useCallback(async () => {
-    try {
-      const res = await fetch(`/api/courses/${params.id}`, {
-        next: { revalidate: 60 }
-      })
-      if (!res.ok) throw new Error("Failed to fetch course")
-      const data = await res.json()
-      setCourse(data)
-      
-      const firstFreeVideo = data.videos.find(v => v.isFree)
+  // Set first free video as selected when course loads
+  useEffect(() => {
+    if (course && !selectedVideo) {
+      const firstFreeVideo = course.videos.find(v => v.isFree)
       if (firstFreeVideo) {
         setSelectedVideo(firstFreeVideo)
       }
-    } catch (error) {
-      console.error("Error fetching course:", error)
-    } finally {
-      setLoading(false)
     }
-  }, [params.id])
+  }, [course, selectedVideo])
 
-  const checkEnrollment = useCallback(async () => {
-    if (!session?.user) return
-    
-    try {
-      const res = await fetch(`/api/enrollments/check?courseId=${params.id}`)
-      if (res.ok) {
-        const data = await res.json()
-        setIsEnrolled(data.enrolled)
-      }
-    } catch (error) {
-      console.error("Error checking enrollment:", error)
-    }
-  }, [params.id, session?.user])
+  const isLoading = courseLoading || (authStatus === "loading")
 
-  useEffect(() => {
-    if (params.id) {
-      fetchCourse()
-    }
-  }, [params.id, fetchCourse])
-
-  useEffect(() => {
-    if (session?.user && params.id) {
-      checkEnrollment()
-    }
-  }, [session?.user, params.id, checkEnrollment])
-
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background">
         <LoadingBubbles/>

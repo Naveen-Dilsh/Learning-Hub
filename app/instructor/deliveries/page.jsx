@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useMemo, memo } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { useToast } from "@/hooks/use-toast"
 import LoadingBubbles from "@/components/loadingBubbles"
 import {
@@ -202,13 +203,10 @@ export default function InstructorDeliveries() {
   const { data: session, status: authStatus } = useSession()
   const router = useRouter()
   const { toast } = useToast()
-  const [deliveries, setDeliveries] = useState([])
-  const [counts, setCounts] = useState({})
-  const [loading, setLoading] = useState(true)
+  const queryClient = useQueryClient()
   const [filterStatus, setFilterStatus] = useState("")
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedDelivery, setSelectedDelivery] = useState(null)
-  const [updating, setUpdating] = useState(false)
   const [deleting, setDeleting] = useState(null)
 
   useEffect(() => {
@@ -219,73 +217,89 @@ export default function InstructorDeliveries() {
     }
   }, [authStatus, session, router])
 
-  useEffect(() => {
-    if (session?.user?.id) {
-      fetchDeliveries()
-    }
-  }, [session, filterStatus])
-
-  const fetchDeliveries = useCallback(async () => {
-    try {
-      setLoading(true)
+  const {
+    data: deliveriesData,
+    isLoading,
+    isError,
+    error,
+  } = useQuery({
+    queryKey: ["instructorDeliveries", session?.user?.id, filterStatus],
+    queryFn: async () => {
+      if (!session?.user?.id) return { deliveries: [], counts: {} }
+      
       const params = new URLSearchParams()
       if (filterStatus) params.append("status", filterStatus)
 
       const res = await fetch(`/api/instructor/deliveries?${params}`, {
         cache: "no-store",
       })
+      
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}))
         throw new Error(errorData.message || "Failed to fetch deliveries")
       }
-      const data = await res.json()
-      setDeliveries(data.deliveries || [])
-      setCounts(data.counts || {})
-    } catch (error) {
-      console.error("Error fetching deliveries:", error)
+      
+      return await res.json()
+    },
+    enabled: !!session?.user?.id,
+    staleTime: 30 * 1000, // 30 seconds
+    onError: (error) => {
       toast({
         title: "Error",
         description: error.message || "Failed to load deliveries",
         variant: "destructive",
       })
-    } finally {
-      setLoading(false)
-    }
-  }, [filterStatus, toast])
-
-  const updateDelivery = useCallback(
-    async (id, updateData) => {
-      setUpdating(true)
-      try {
-        const res = await fetch(`/api/instructor/deliveries/${id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(updateData),
-        })
-
-        if (!res.ok) {
-          const errorData = await res.json().catch(() => ({}))
-          throw new Error(errorData.message || "Failed to update delivery")
-        }
-
-        await fetchDeliveries()
-        setSelectedDelivery(null)
-        toast({
-          title: "Success",
-          description: "Delivery updated successfully!",
-        })
-      } catch (error) {
-        console.error("Error updating delivery:", error)
-        toast({
-          title: "Error",
-          description: error.message || "Failed to update delivery",
-          variant: "destructive",
-        })
-      } finally {
-        setUpdating(false)
+    },
+    onSuccess: () => {
+      // Mark deliveries as viewed when data loads successfully
+      if (typeof window !== "undefined") {
+        localStorage.setItem("instructor-deliveries-viewed", "true")
       }
     },
-    [fetchDeliveries, toast]
+  })
+
+  const deliveries = useMemo(() => deliveriesData?.deliveries || [], [deliveriesData])
+  const counts = useMemo(() => deliveriesData?.counts || {}, [deliveriesData])
+
+  const updateDeliveryMutation = useMutation({
+    mutationFn: async ({ id, data }) => {
+      const res = await fetch(`/api/instructor/deliveries/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      })
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}))
+        throw new Error(errorData.message || "Failed to update delivery")
+      }
+
+      return await res.json()
+    },
+    onSuccess: () => {
+      // Invalidate and refetch deliveries
+      queryClient.invalidateQueries({ queryKey: ["instructorDeliveries", session?.user?.id] })
+      
+      setSelectedDelivery(null)
+      toast({
+        title: "Success",
+        description: "Delivery updated successfully!",
+      })
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update delivery",
+        variant: "destructive",
+      })
+    },
+  })
+
+  const updateDelivery = useCallback(
+    (id, updateData) => {
+      updateDeliveryMutation.mutate({ id, data: updateData })
+    },
+    [updateDeliveryMutation]
   )
 
   const handleStatusUpdate = useCallback(
@@ -295,38 +309,46 @@ export default function InstructorDeliveries() {
     [updateDelivery]
   )
 
-  const handleDelete = useCallback(
-    async (id) => {
-      if (!confirm("Are you sure you want to delete this delivery record?")) return
+  const deleteDeliveryMutation = useMutation({
+    mutationFn: async (id) => {
+      const res = await fetch(`/api/instructor/deliveries/${id}`, {
+        method: "DELETE",
+      })
 
-      setDeleting(id)
-      try {
-        const res = await fetch(`/api/instructor/deliveries/${id}`, {
-          method: "DELETE",
-        })
-
-        if (!res.ok) {
-          const errorData = await res.json().catch(() => ({}))
-          throw new Error(errorData.message || "Failed to delete delivery")
-        }
-
-        await fetchDeliveries()
-        toast({
-          title: "Success",
-          description: "Delivery deleted successfully!",
-        })
-      } catch (error) {
-        console.error("Error deleting delivery:", error)
-        toast({
-          title: "Error",
-          description: error.message || "Failed to delete delivery",
-          variant: "destructive",
-        })
-      } finally {
-        setDeleting(null)
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}))
+        throw new Error(errorData.message || "Failed to delete delivery")
       }
+
+      return await res.json()
     },
-    [fetchDeliveries, toast]
+    onSuccess: () => {
+      // Invalidate and refetch deliveries
+      queryClient.invalidateQueries({ queryKey: ["instructorDeliveries", session?.user?.id] })
+      
+      toast({
+        title: "Success",
+        description: "Delivery deleted successfully!",
+      })
+      setDeleting(null)
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete delivery",
+        variant: "destructive",
+      })
+      setDeleting(null)
+    },
+  })
+
+  const handleDelete = useCallback(
+    (id) => {
+      if (!confirm("Are you sure you want to delete this delivery record?")) return
+      setDeleting(id)
+      deleteDeliveryMutation.mutate(id)
+    },
+    [deleteDeliveryMutation]
   )
 
   const handleEdit = useCallback((delivery) => {
@@ -352,7 +374,7 @@ export default function InstructorDeliveries() {
     )
   }, [deliveries, searchQuery])
 
-  if (authStatus === "loading" || loading) {
+  if (authStatus === "loading" || isLoading || !session?.user?.id) {
     return <LoadingBubbles />
   }
 
@@ -544,10 +566,10 @@ export default function InstructorDeliveries() {
                   </button>
                   <button
                     type="submit"
-                    disabled={updating}
+                    disabled={updateDeliveryMutation.isPending}
                     className="flex-1 btn-primary inline-flex items-center justify-center gap-2 px-4 py-2.5 sm:py-3 rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {updating ? (
+                    {updateDeliveryMutation.isPending ? (
                       <>
                         <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
                         Saving...

@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect, useState, useCallback, useMemo } from "react"
+import { useQuery } from "@tanstack/react-query"
+import { useMemo } from "react"
 import { useSession } from "next-auth/react"
 import { useToast } from "@/hooks/use-toast"
 import Link from "next/link"
@@ -49,14 +50,17 @@ const UserAvatar = ({ user, size = "md" }) => {
 export default function LeaderboardPage() {
   const { data: session } = useSession()
   const { toast } = useToast()
-  const [leaderboard, setLeaderboard] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [currentUserRank, setCurrentUserRank] = useState(null)
 
-  const fetchLeaderboard = useCallback(async () => {
-    try {
+  const {
+    data: leaderboardData,
+    isLoading,
+    isError,
+    error,
+  } = useQuery({
+    queryKey: ["leaderboard"],
+    queryFn: async () => {
       const res = await fetch("/api/leaderboard", {
-        next: { revalidate: 60 }
+        cache: "no-store",
       })
       
       if (!res.ok) {
@@ -65,32 +69,25 @@ export default function LeaderboardPage() {
       }
 
       const data = await res.json()
-      
-      if (data.leaderboard) {
-        setLeaderboard(data.leaderboard)
-        
-        // Find current user's rank
-        const userEntry = data.leaderboard.find(
-          (entry) => entry.email === session?.user?.email
-        )
-        if (userEntry) {
-          setCurrentUserRank(userEntry)
-        }
-      }
-    } catch (error) {
+      return data.leaderboard || []
+    },
+    staleTime: 30 * 1000, // 30 seconds
+    onError: (error) => {
       toast({
         variant: "destructive",
         title: "Error Loading Leaderboard",
         description: error.message || "Failed to load leaderboard. Please try again.",
       })
-    } finally {
-      setLoading(false)
-    }
-  }, [session?.user?.email, toast])
+    },
+  })
 
-  useEffect(() => {
-    fetchLeaderboard()
-  }, [fetchLeaderboard])
+  const leaderboard = leaderboardData || []
+
+  // Find current user's rank
+  const currentUserRank = useMemo(() => {
+    if (!session?.user?.email) return null
+    return leaderboard.find((entry) => entry.email === session.user.email) || null
+  }, [leaderboard, session?.user?.email])
 
   // Memoized top 3
   const topThree = useMemo(() => leaderboard.slice(0, 3), [leaderboard])
@@ -98,7 +95,7 @@ export default function LeaderboardPage() {
   // Memoized rest of leaderboard
   const restOfLeaderboard = useMemo(() => leaderboard.slice(3), [leaderboard])
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background">
         <LoadingBubbles />
@@ -108,31 +105,16 @@ export default function LeaderboardPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <div className="bg-card/95 backdrop-blur-sm border-b border-border sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
-          <Link
-            href="/student"
-            className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground mb-3 sm:mb-4 font-medium transition-colors text-sm sm:text-base"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Back to Dashboard
-          </Link>
-          <div className="flex items-center gap-2 sm:gap-3">
-            <div className="p-2 sm:p-3 bg-primary/10 rounded-lg">
-              <TrendingUp className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
-            </div>
-            <div>
-              <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-foreground">Leaderboard</h1>
-              <p className="text-xs sm:text-sm text-muted-foreground mt-1">
-                Top learners ranked by credits earned
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+        {/* Header Section */}
+        <div className="mb-6 sm:mb-8">
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-foreground mb-2">
+            Leaderboard
+          </h1>
+          <p className="text-sm sm:text-base text-muted-foreground">
+            Top learners ranked by credits earned
+          </p>
+        </div>
         {/* Current User Stats */}
         {currentUserRank && (
           <div className="bg-gradient-to-r from-primary to-secondary rounded-xl p-4 sm:p-6 mb-6 sm:mb-8 text-primary-foreground shadow-lg">

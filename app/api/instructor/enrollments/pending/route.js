@@ -5,16 +5,23 @@ import { authOptions } from "@/lib/auth"
 import { NextResponse } from "next/server"
 import { unstable_cache } from "next/cache"
 
-async function getPendingEnrollments(instructorId) {
+async function getPendingEnrollments(userRole, userId) {
+  // Build where clause - ADMIN sees all, INSTRUCTOR sees only their courses
+  const where = {
+    paymentMethod: "manual",
+    status: "PENDING",
+    approvedBy: null,
+  }
+
+  // Only filter by instructorId if user is INSTRUCTOR (not ADMIN)
+  if (userRole === "INSTRUCTOR") {
+    where.course = {
+      instructorId: userId,
+    }
+  }
+
   return await prisma.enrollment.findMany({
-    where: {
-      paymentMethod: "manual",
-      status: "PENDING",
-      approvedBy: null,
-      course: {
-        instructorId,
-      },
-    },
+    where,
     select: {
       id: true,
       enrolledAt: true,
@@ -58,16 +65,20 @@ export async function GET(request) {
     }
 
     // Cache pending enrollments for 30 seconds (frequently changing data)
+    const cacheKey = session.user.role === "ADMIN" 
+      ? "admin-pending-enrollments" 
+      : `instructor-pending-enrollments-${session.user.id}`
+    
     const cachedGetPendingEnrollments = unstable_cache(
-      getPendingEnrollments,
-      [`instructor-pending-enrollments-${session.user.id}`],
+      () => getPendingEnrollments(session.user.role, session.user.id),
+      [cacheKey],
       {
         revalidate: 30,
-        tags: [`instructor-pending-enrollments-${session.user.id}`],
+        tags: [cacheKey],
       }
     )
 
-    const pendingEnrollments = await cachedGetPendingEnrollments(session.user.id)
+    const pendingEnrollments = await cachedGetPendingEnrollments()
 
     const dbTime = dbTimer.stop()
     const totalTime = routeTimer.stop()

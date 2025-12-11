@@ -12,8 +12,15 @@ export default function Messages() {
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push("/auth/signin")
+    } else if (status === "authenticated") {
+      // Block ADMIN access - redirect to allowed page
+      if (session?.user?.role === "ADMIN") {
+        router.push("/instructor/enrollments/pending")
+      } else if (session?.user?.role !== "INSTRUCTOR") {
+        router.push("/dashboard")
+      }
     }
-  }, [status, router])
+  }, [status, session, router])
 
   useEffect(() => {
     setLoading(false)

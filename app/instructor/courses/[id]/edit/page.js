@@ -3,6 +3,7 @@
 import { useSession } from "next-auth/react"
 import { useRouter, useParams } from "next/navigation"
 import { useState, useEffect, useCallback, useMemo } from "react"
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { useToast } from "@/hooks/use-toast"
 import Link from "next/link"
 import ImageUpload from "@/components/image-upload"
@@ -29,6 +30,7 @@ export default function EditCourse() {
   const router = useRouter()
   const params = useParams()
   const { toast } = useToast()
+  const queryClient = useQueryClient()
   const [formData, setFormData] = useState({
     title: "",
     description: "",
@@ -36,54 +38,63 @@ export default function EditCourse() {
     thumbnail: "",
     published: false,
   })
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
-  const [deleting, setDeleting] = useState(false)
   const [resourcesRefreshKey, setResourcesRefreshKey] = useState(0)
 
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push("/auth/signin")
-    } else if (
-      status === "authenticated" &&
-      session?.user?.role !== "INSTRUCTOR" &&
-      session?.user?.role !== "ADMIN"
-    ) {
-      router.push("/dashboard")
+    } else if (status === "authenticated") {
+      // Block ADMIN access - redirect to allowed page
+      if (session?.user?.role === "ADMIN") {
+        router.push("/instructor/enrollments/pending")
+      } else if (session?.user?.role !== "INSTRUCTOR") {
+        router.push("/dashboard")
+      }
     }
   }, [status, session, router])
 
-  useEffect(() => {
-    if (params.id) {
-      fetchCourse()
-    }
-  }, [params.id])
-
-  const fetchCourse = useCallback(async () => {
-    try {
+  const {
+    data: courseData,
+    isLoading,
+    isError,
+    error,
+  } = useQuery({
+    queryKey: ["course", params.id],
+    queryFn: async () => {
       const res = await fetch(`/api/courses/${params.id}`, {
-        next: { revalidate: 60 },
+        cache: "no-store",
       })
-      if (!res.ok) throw new Error("Failed to fetch course")
-      const data = await res.json()
-      setFormData({
-        title: data.title || "",
-        description: data.description || "",
-        price: data.price?.toString() || "",
-        thumbnail: data.thumbnail || "",
-        published: data.published || false,
-      })
-    } catch (err) {
+      
+      if (!res.ok) {
+        throw new Error("Failed to fetch course")
+      }
+      
+      return await res.json()
+    },
+    enabled: !!params.id,
+    staleTime: 60 * 1000, // 60 seconds
+    onError: (error) => {
       toast({
         variant: "destructive",
         title: "Error",
-        description: err.message || "Failed to load course",
+        description: error.message || "Failed to load course",
       })
-    } finally {
-      setLoading(false)
+    },
+  })
+
+  // Update form data when course data loads
+  useEffect(() => {
+    if (courseData) {
+      setFormData({
+        title: courseData.title || "",
+        description: courseData.description || "",
+        price: courseData.price?.toString() || "",
+        thumbnail: courseData.thumbnail || "",
+        published: courseData.published || false,
+      })
     }
-  }, [params.id, toast])
+  }, [courseData])
 
   const handleChange = useCallback((e) => {
     const { name, value, type, checked } = e.target
@@ -101,62 +112,63 @@ export default function EditCourse() {
     return formData.title.trim() && formData.description.trim() && formData.price && formData.price > 0
   }, [formData])
 
+  const updateCourseMutation = useMutation({
+    mutationFn: async (data) => {
+      const res = await fetch(`/api/courses/${params.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      })
+
+      const result = await res.json()
+
+      if (!res.ok) {
+        throw new Error(result.message || "Failed to update course")
+      }
+
+      return result
+    },
+    onSuccess: () => {
+      // Invalidate and refetch course data
+      queryClient.invalidateQueries({ queryKey: ["course", params.id] })
+      queryClient.invalidateQueries({ queryKey: ["instructorCourses", session?.user?.id] })
+      
+      toast({
+        title: "Course Updated",
+        description: "Your course has been updated successfully!",
+      })
+
+      router.push("/instructor/courses")
+    },
+    onError: (error) => {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message || "An error occurred. Please try again.",
+      })
+    },
+  })
+
   const handleSubmit = useCallback(
     async (e) => {
       e.preventDefault()
-      setSaving(true)
-
-      try {
-        const res = await fetch(`/api/courses/${params.id}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            title: formData.title.trim(),
-            description: formData.description.trim(),
-            price: Number.parseFloat(formData.price),
-            thumbnail: formData.thumbnail || null,
-            published: formData.published,
-          }),
-        })
-
-        const data = await res.json()
-
-        if (!res.ok) {
-          toast({
-            variant: "destructive",
-            title: "Error",
-            description: data.message || "Failed to update course",
-          })
-          setSaving(false)
-          return
-        }
-
-        toast({
-          title: "Course Updated",
-          description: "Your course has been updated successfully!",
-        })
-
-        router.push("/instructor/courses")
-      } catch (err) {
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: err.message || "An error occurred. Please try again.",
-        })
-      } finally {
-        setSaving(false)
-      }
+      updateCourseMutation.mutate({
+        title: formData.title.trim(),
+        description: formData.description.trim(),
+        price: Number.parseFloat(formData.price),
+        thumbnail: formData.thumbnail || null,
+        published: formData.published,
+      })
     },
-    [formData, params.id, router, toast]
+    [formData, updateCourseMutation]
   )
 
   const handlePublishToggle = useCallback(() => {
     setFormData((prev) => ({ ...prev, published: !prev.published }))
   }, [])
 
-  const handleDelete = useCallback(async () => {
-    setDeleting(true)
-    try {
+  const deleteCourseMutation = useMutation({
+    mutationFn: async () => {
       const res = await fetch(`/api/courses/${params.id}`, {
         method: "DELETE",
       })
@@ -166,23 +178,32 @@ export default function EditCourse() {
         throw new Error(data.message || "Failed to delete course")
       }
 
+      return await res.json()
+    },
+    onSuccess: () => {
+      // Invalidate queries
+      queryClient.invalidateQueries({ queryKey: ["instructorCourses", session?.user?.id] })
+      
       toast({
         title: "Course Deleted",
         description: "Course has been deleted successfully",
       })
 
+      setShowDeleteModal(false)
       router.push("/instructor/courses")
-    } catch (err) {
+    },
+    onError: (error) => {
       toast({
         variant: "destructive",
         title: "Error",
-        description: err.message || "Failed to delete course",
+        description: error.message || "Failed to delete course",
       })
-    } finally {
-      setDeleting(false)
-      setShowDeleteModal(false)
-    }
-  }, [params.id, router, toast])
+    },
+  })
+
+  const handleDelete = useCallback(() => {
+    deleteCourseMutation.mutate()
+  }, [deleteCourseMutation])
 
   const handleResourceUploadComplete = useCallback(() => {
     setResourcesRefreshKey((prev) => prev + 1)
@@ -192,7 +213,7 @@ export default function EditCourse() {
     })
   }, [toast])
 
-  if (status === "loading" || loading) {
+  if (status === "loading" || isLoading || !params.id) {
     return <LoadingBubbles />
   }
 
@@ -394,10 +415,10 @@ export default function EditCourse() {
           <div className="bg-muted px-5 sm:px-6 lg:px-8 py-4 sm:py-6 border-t border-border flex flex-col sm:flex-row gap-3">
             <button
               type="submit"
-              disabled={saving || !isFormValid}
+              disabled={updateCourseMutation.isPending || !isFormValid}
               className="btn-primary flex-1 px-6 sm:px-8 py-2.5 sm:py-3 rounded-lg sm:rounded-xl font-semibold text-sm sm:text-base disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 active:scale-[0.98]"
             >
-              {saving ? (
+              {updateCourseMutation.isPending ? (
                 <>
                   <div className="w-4 h-4 sm:w-5 sm:h-5 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin"></div>
                   Saving Changes...
@@ -424,7 +445,7 @@ export default function EditCourse() {
             <FileUp className="w-5 h-5 text-primary" />
             <h2 className="text-lg sm:text-xl font-bold text-foreground">Course Resources</h2>
           </div>
-          <CourseResources key={resourcesRefreshKey} courseId={params.id} />
+          <CourseResources key={resourcesRefreshKey} courseId={params.id} canEdit={true} />
         </div>
 
         {/* Upload New Resource */}
@@ -458,10 +479,10 @@ export default function EditCourse() {
               </button>
               <button
                 onClick={handleDelete}
-                disabled={deleting}
+                disabled={deleteCourseMutation.isPending}
                 className="btn-danger flex-1 px-4 py-2.5 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] flex items-center justify-center gap-2"
               >
-                {deleting ? (
+                {deleteCourseMutation.isPending ? (
                   <>
                     <div className="w-4 h-4 border-2 border-destructive-foreground border-t-transparent rounded-full animate-spin"></div>
                     Deleting...

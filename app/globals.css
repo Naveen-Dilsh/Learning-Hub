@@ -68,6 +68,30 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+  
+  /* Hero Section Gradient Colors - Light Mode */
+  --hero-gradient-start: #2563eb;
+  --hero-gradient-mid: #9333ea;
+  --hero-gradient-end: #16a34a;
+  --hero-text-primary: #1e293b;
+  --hero-text-secondary: #64748b;
+  --hero-bg-start: #f8fafc;
+  --hero-bg-mid: #ffffff;
+  --hero-bg-end: #eff6ff;
+  --hero-badge-bg: #ffffff;
+  --hero-badge-border: #dbeafe;
+  --hero-badge-text: #1e293b;
+  --hero-badge-text-muted: #64748b;
+  --hero-card-bg: rgba(255, 255, 255, 0.6);
+  --hero-card-border: #e2e8f0;
+  --hero-indicator-active: #2563eb;
+  --hero-indicator-inactive: #cbd5e1;
+  --hero-button-primary-start: #2563eb;
+  --hero-button-primary-end: #9333ea;
+  --hero-button-primary-shadow: rgba(37, 99, 235, 0.4);
+  --hero-button-secondary-border: #cbd5e1;
+  --hero-button-secondary-text: #334155;
+  --hero-button-secondary-hover: #f1f5f9;
 }
 
 .dark {
@@ -134,12 +158,37 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(0.269 0 0);
   --sidebar-ring: oklch(0.439 0 0);
+  
+  /* Hero Section Gradient Colors - Dark Mode */
+  --hero-gradient-start: #3b82f6;
+  --hero-gradient-mid: #a78bfa;
+  --hero-gradient-end: #22c55e;
+  --hero-text-primary: #f1f5f9;
+  --hero-text-secondary: #94a3b8;
+  --hero-bg-start: #0f172a;
+  --hero-bg-mid: #1e293b;
+  --hero-bg-end: #1e3a8a;
+  --hero-badge-bg: #1e293b;
+  --hero-badge-border: #334155;
+  --hero-badge-text: #f1f5f9;
+  --hero-badge-text-muted: #94a3b8;
+  --hero-card-bg: rgba(30, 41, 59, 0.6);
+  --hero-card-border: #334155;
+  --hero-indicator-active: #3b82f6;
+  --hero-indicator-inactive: #475569;
+  --hero-button-primary-start: #3b82f6;
+  --hero-button-primary-end: #a78bfa;
+  --hero-button-primary-shadow: rgba(59, 130, 246, 0.4);
+  --hero-button-secondary-border: #475569;
+  --hero-button-secondary-text: #e2e8f0;
+  --hero-button-secondary-hover: #334155;
 }
 
 @theme inline {
   --font-sans: "Inter", "Inter Fallback", system-ui, -apple-system, sans-serif;
   --font-sinhala: "Maname", "Maname Fallback", sans-serif;
   --font-display: "Shrikhand", "Shrikhand Fallback", cursive;
+  --font-shrikhand: "Shrikhand", "Shrikhand Fallback", cursive;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);

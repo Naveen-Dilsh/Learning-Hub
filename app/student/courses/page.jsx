@@ -1,9 +1,10 @@
 "use client"
 
 import { useSession } from "next-auth/react"
+import { useQuery } from "@tanstack/react-query"
 import Link from "next/link"
-import { useEffect, useState, useMemo, useCallback, memo } from "react"
-import { BookOpen, Play, TrendingUp } from "lucide-react"
+import { useMemo, memo } from "react"
+import { BookOpen, Play, TrendingUp, Award } from "lucide-react"
 import LoadingBubbles from "@/components/loadingBubbles"
 
 // Memoized CourseCard component for better performance
@@ -36,6 +37,18 @@ const CourseCard = memo(({ enrollment }) => {
             </div>
           </div>
         )}
+
+        {/* Certificate Badge */}
+        {enrollment.certificate && (
+          <div className="absolute top-2 left-2 sm:top-3 sm:left-3 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg shadow-md backdrop-blur-sm">
+            <div className="flex items-center gap-1 sm:gap-1.5">
+              <Award className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-emerald-600 dark:text-emerald-400" />
+              <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                Certified
+              </span>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Course Content */}
@@ -63,14 +76,37 @@ const CourseCard = memo(({ enrollment }) => {
           </div>
         </div>
 
-        {/* Continue Learning Button */}
-        <Link
-          href={`/student/browse-course/${enrollment.course.id}/watch`}
-          className="btn-primary flex items-center justify-center gap-2 w-full px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg text-xs sm:text-sm font-semibold active:scale-[0.98]"
-        >
-          <Play className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-          <span>Continue Learning</span>
-        </Link>
+        {/* Action Buttons */}
+        <div className="flex flex-col sm:flex-row gap-2">
+          {enrollment.certificate ? (
+            <>
+              {/* <button
+                onClick={() => {
+                  window.open(`/api/certificates/${enrollment.certificate.id}/download`, "_blank")
+                }}
+                className="btn-primary flex items-center justify-center gap-2 flex-1 px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg text-xs sm:text-sm font-semibold active:scale-[0.98] bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-600 hover:to-yellow-700"
+              >
+                <Award className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                <span>View Certificate</span>
+              </button> */}
+              <Link
+                href={`/student/browse-course/${enrollment.course.id}/watch`}
+                className="btn-secondary flex items-center justify-center gap-2 flex-1 px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg text-xs sm:text-sm font-semibold active:scale-[0.98]"
+              >
+                <Play className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                <span>Review Course</span>
+              </Link>
+            </>
+          ) : (
+            <Link
+              href={`/student/browse-course/${enrollment.course.id}/watch`}
+              className="btn-primary flex items-center justify-center gap-2 w-full px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg text-xs sm:text-sm font-semibold active:scale-[0.98]"
+            >
+              <Play className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span>Continue Learning</span>
+            </Link>
+          )}
+        </div>
       </div>
     </div>
   )
@@ -79,44 +115,39 @@ const CourseCard = memo(({ enrollment }) => {
 CourseCard.displayName = 'CourseCard'
 
 export default function MyCourses() {
-  const { data: session } = useSession()
-  const [enrolledCourses, setEnrolledCourses] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
+  const { data: session, status: authStatus } = useSession()
 
-  // Memoized fetch function for better performance
-  const fetchEnrolledCourses = useCallback(async () => {
-    if (!session?.user?.id) return
-    
-    try {
-      setError(null)
+  const {
+    data: enrollmentData,
+    isLoading,
+    isError,
+    error,
+  } = useQuery({
+    queryKey: ["enrollments", session?.user?.id],
+    queryFn: async () => {
+      if (!session?.user?.id) {
+        return { enrollments: [], stats: { totalCourses: 0, hoursWatched: 0, completedCourses: 0, certificates: 0 } }
+      }
+      
       const res = await fetch(`/api/student/enrollments?studentId=${session.user.id}`, {
-        // Add caching headers for better performance
-        next: { revalidate: 60 }, // Cache for 60 seconds
+        cache: "no-store",
       })
       
       if (!res.ok) throw new Error("Failed to fetch enrollments")
       
-      const data = await res.json()
-      setEnrolledCourses(data.enrollments || [])
-    } catch (error) {
-      console.error("Error fetching enrollments:", error)
-      setError(error.message)
-    } finally {
-      setLoading(false)
-    }
-  }, [session?.user?.id])
+      return await res.json()
+    },
+    enabled: !!session?.user?.id,
+    staleTime: 30 * 1000, // 30 seconds
+  })
 
-  useEffect(() => {
-    if (session?.user?.id) {
-      fetchEnrolledCourses()
-    }
-  }, [session?.user?.id, fetchEnrolledCourses])
-
-  // Memoize course count for performance
+  const enrolledCourses = enrollmentData?.enrollments || []
   const courseCount = useMemo(() => enrolledCourses.length, [enrolledCourses.length])
 
-  if (loading) return <LoadingBubbles />
+  // Show loading if query is loading OR if session is not ready yet
+  if (isLoading || authStatus === "loading" || !session?.user?.id) {
+    return <LoadingBubbles />
+  }
 
   return (
     <div className="min-h-screen bg-background transition-colors">
@@ -136,9 +167,11 @@ export default function MyCourses() {
 
       {/* Content Section */}
       <div className="max-w-[1600px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
-        {error && (
+        {isError && (
           <div className="mb-4 p-4 bg-destructive/10 border border-destructive/20 rounded-lg">
-            <p className="text-sm text-destructive">Error loading courses: {error}</p>
+            <p className="text-sm text-destructive">
+              Error loading courses: {error?.message || "Failed to load courses. Please try again."}
+            </p>
           </div>
         )}
         

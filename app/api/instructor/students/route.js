@@ -5,79 +5,93 @@ import { authOptions } from "@/lib/auth"
 import { NextResponse } from "next/server"
 import { unstable_cache } from "next/cache"
 
-async function getStudentsData(instructorId) {
-  // Get all courses by this instructor
-  const instructorCourses = await prisma.course.findMany({
-    where: { instructorId },
-    select: { id: true },
-  })
-  const courseIds = instructorCourses.map((c) => c.id)
+async function getStudentsData(userRole, userId) {
+  let studentIds = []
+  let courseIds = []
 
-  if (courseIds.length === 0) {
-    return { students: [], stats: { totalStudents: 0, totalEnrollments: 0 } }
-  }
+  if (userRole === "ADMIN") {
+    // ADMIN: Get ALL students directly (not filtered by courses)
+    // We'll get studentIds from the students query itself
+    studentIds = [] // Will be populated from all students
+  } else {
+    // INSTRUCTOR: Get courses by this instructor
+    const instructorCourses = await prisma.course.findMany({
+      where: { instructorId: userId },
+      select: { id: true },
+    })
+    courseIds = instructorCourses.map((c) => c.id)
 
-  // Get all unique students enrolled in instructor's courses
-  const enrollments = await prisma.enrollment.findMany({
-    where: {
-      courseId: { in: courseIds },
-    },
-    select: {
-      studentId: true,
-      status: true,
-      courseId: true,
-      enrolledAt: true,
-    },
-    distinct: ["studentId"],
-  })
+    if (courseIds.length === 0) {
+      return { students: [], stats: { totalStudents: 0, totalEnrollments: 0 } }
+    }
 
-  const studentIds = enrollments.map((e) => e.studentId)
-
-  if (studentIds.length === 0) {
-    return { students: [], stats: { totalStudents: 0, totalEnrollments: 0 } }
-  }
-
-  // Fetch students with their details and related data in parallel
-  const [students, enrollmentCounts, paymentCounts] = await Promise.all([
-    // Get student details
-    prisma.user.findMany({
+    // Get all unique students enrolled in instructor's courses
+    const enrollments = await prisma.enrollment.findMany({
       where: {
-        id: { in: studentIds },
-        role: "STUDENT",
+        courseId: { in: courseIds },
       },
       select: {
-        id: true,
-        name: true,
-        email: true,
-        studentNumber: true,
-        phone: true,
-        addressLine1: true,
-        addressLine2: true,
-        city: true,
-        district: true,
-        postalCode: true,
-        country: true,
-        createdAt: true,
+        studentId: true,
       },
-      orderBy: { createdAt: "desc" },
-    }),
-    // Get enrollment counts per student
+      distinct: ["studentId"],
+    })
+
+    studentIds = enrollments.map((e) => e.studentId)
+
+    if (studentIds.length === 0) {
+      return { students: [], stats: { totalStudents: 0, totalEnrollments: 0 } }
+    }
+  }
+
+  // Fetch students first
+  const students = await prisma.user.findMany({
+    where: userRole === "ADMIN" 
+      ? { role: "STUDENT" }
+      : {
+          id: { in: studentIds },
+          role: "STUDENT",
+        },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      studentNumber: true,
+      phone: true,
+      addressLine1: true,
+      addressLine2: true,
+      city: true,
+      district: true,
+      postalCode: true,
+      country: true,
+      createdAt: true,
+    },
+    orderBy: { createdAt: "desc" },
+  })
+
+  // Get student IDs from the fetched students
+  const fetchedStudentIds = students.map((s) => s.id)
+
+  if (fetchedStudentIds.length === 0) {
+    return { students: [], stats: { totalStudents: 0, totalEnrollments: 0 } }
+  }
+
+  // Fetch enrollment and payment counts with correct student IDs
+  const [enrollmentCounts, paymentCounts] = await Promise.all([
     prisma.enrollment.groupBy({
       by: ["studentId"],
       where: {
-        studentId: { in: studentIds },
-        courseId: { in: courseIds },
+        studentId: { in: fetchedStudentIds },
+        ...(userRole === "INSTRUCTOR" && courseIds.length > 0 ? { courseId: { in: courseIds } } : {}),
       },
       _count: {
         id: true,
       },
     }),
-    // Get payment counts per student
     prisma.payment.groupBy({
       by: ["studentId"],
       where: {
-        studentId: { in: studentIds },
-        courseId: { in: courseIds },
+        studentId: { in: fetchedStudentIds },
+        ...(userRole === "INSTRUCTOR" && courseIds.length > 0 ? { courseId: { in: courseIds } } : {}),
         status: "COMPLETED",
       },
       _count: {
@@ -101,8 +115,8 @@ async function getStudentsData(instructorId) {
   // Get all enrollments with course details in a single query
   const allEnrollments = await prisma.enrollment.findMany({
     where: {
-      studentId: { in: studentIds },
-      courseId: { in: courseIds },
+      studentId: { in: fetchedStudentIds },
+      ...(userRole === "INSTRUCTOR" && courseIds.length > 0 ? { courseId: { in: courseIds } } : {}),
     },
     select: {
       studentId: true,
@@ -144,7 +158,14 @@ async function getStudentsData(instructorId) {
   }))
 
   // Calculate stats
-  const totalEnrollments = enrollmentCounts.reduce((sum, e) => sum + e._count.id, 0)
+  // For ADMIN, count all enrollments; for INSTRUCTOR, count only course-specific enrollments
+  const totalEnrollments = userRole === "ADMIN"
+    ? await prisma.enrollment.count({
+        where: {
+          studentId: { in: fetchedStudentIds },
+        },
+      })
+    : enrollmentCounts.reduce((sum, e) => sum + e._count.id, 0)
 
   return {
     students: studentsWithDetails,
@@ -172,19 +193,21 @@ export async function GET(request) {
       return NextResponse.json({ message: "Forbidden" }, { status: 403 })
     }
 
-    const instructorId = session.user.id
-
     // Cache students data for 60 seconds
+    const cacheKey = session.user.role === "ADMIN"
+      ? "admin-students"
+      : `instructor-students-${session.user.id}`
+    
     const cachedGetStudentsData = unstable_cache(
-      getStudentsData,
-      [`instructor-students-${instructorId}`],
+      () => getStudentsData(session.user.role, session.user.id),
+      [cacheKey],
       {
         revalidate: 60,
-        tags: [`instructor-students-${instructorId}`],
+        tags: [cacheKey],
       }
     )
 
-    const data = await cachedGetStudentsData(instructorId)
+    const data = await cachedGetStudentsData()
 
     const dbTime = dbTimer.stop()
     const totalTime = routeTimer.stop()
@@ -193,7 +216,8 @@ export async function GET(request) {
     performanceLogger.logAPIRoute("GET", "/api/instructor/students", totalTime, {
       status: 200,
       dbTime,
-      instructorId,
+      userId: session.user.id,
+      userRole: session.user.role,
       studentsCount: data.students.length,
     })
 

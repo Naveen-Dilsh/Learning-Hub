@@ -91,12 +91,15 @@ export default function Footer() {
 
         <div className="pt-8 border-t border-border flex flex-col md:flex-row justify-between items-center gap-4">
           <p className="text-sm text-muted-foreground">© 2025 SmartLearn. All rights reserved.</p>
-          <div className="flex gap-6 text-sm text-muted-foreground">
+          <div className="flex gap-6 text-sm text-muted-foreground flex-wrap">
             <Link href="/privacy" className="hover:text-primary transition-colors">
               Privacy Policy
             </Link>
             <Link href="/terms" className="hover:text-primary transition-colors">
               Terms of Service
+            </Link>
+            <Link href="/refund-policy" className="hover:text-primary transition-colors">
+              Refund Policy
             </Link>
           </div>
         </div>

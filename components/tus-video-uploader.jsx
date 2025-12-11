@@ -1,11 +1,13 @@
 "use client"
 
 import { useState, useRef, useCallback } from "react"
+import { useQueryClient } from "@tanstack/react-query"
 import { Upload, X, CheckCircle, AlertCircle, Video, FileVideo } from 'lucide-react'
 import { useToast } from "@/hooks/use-toast"
 
 export default function TusVideoUploader({ courseId, onUploadComplete }) {
   const { toast } = useToast()
+  const queryClient = useQueryClient()
   const [selectedFile, setSelectedFile] = useState(null)
   const [uploading, setUploading] = useState(false)
   const [progress, setProgress] = useState(0)
@@ -119,6 +121,26 @@ export default function TusVideoUploader({ courseId, onUploadComplete }) {
 
       setSuccess(true)
       setProgress(100)
+      
+      // Immediately refetch course data to show new video
+      await queryClient.refetchQueries({ 
+        queryKey: ["course", courseId],
+        exact: true 
+      })
+      
+      // Also invalidate related queries for course data
+      queryClient.invalidateQueries({ 
+        queryKey: ["course", courseId],
+        exact: false 
+      })
+      
+      // Invalidate instructor courses list to update video counts
+      queryClient.invalidateQueries({ 
+        queryKey: ["instructorCourses"],
+        exact: false 
+      })
+      
+      // Call the callback if provided
       onUploadComplete?.(mediaId)
 
       toast({
@@ -158,7 +180,7 @@ export default function TusVideoUploader({ courseId, onUploadComplete }) {
       setUploading(false)
       abortControllerRef.current = null
     }
-  }, [selectedFile, videoDetails, courseId, onUploadComplete, toast])
+  }, [selectedFile, videoDetails, courseId, onUploadComplete, toast, queryClient])
 
   const cancelUpload = useCallback(() => {
     if (abortControllerRef.current) {

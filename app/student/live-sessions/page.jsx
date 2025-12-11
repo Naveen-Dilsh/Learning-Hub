@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo, memo } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
+import { useQuery, useMutation } from "@tanstack/react-query"
 import { useToast } from "@/hooks/use-toast"
 import Link from "next/link"
 import Image from "next/image"
@@ -166,8 +167,6 @@ export default function StudentLiveSessionsPage() {
   const { data: session, status: authStatus } = useSession()
   const router = useRouter()
   const { toast } = useToast()
-  const [liveSessions, setLiveSessions] = useState([])
-  const [loading, setLoading] = useState(true)
   const [joiningSession, setJoiningSession] = useState(null)
 
   useEffect(() => {
@@ -176,83 +175,94 @@ export default function StudentLiveSessionsPage() {
     }
   }, [authStatus, router])
 
-  const fetchLiveSessions = useCallback(async () => {
-    if (!session?.user?.id) {
-      setLoading(false)
-      return
-    }
-
-    try {
-      setLoading(true)
+  const {
+    data: liveSessionsData,
+    isLoading,
+    isError,
+    error,
+  } = useQuery({
+    queryKey: ["liveSessions", session?.user?.id],
+    queryFn: async () => {
+      if (!session?.user?.id) return { liveSessions: [] }
+      
       const res = await fetch("/api/student/live-sessions", {
         cache: "no-store",
       })
-      const data = await res.json()
-      if (res.ok) {
-        setLiveSessions(Array.isArray(data.liveSessions) ? data.liveSessions : [])
-        // Mark live sessions as viewed when page loads
-        if (typeof window !== "undefined") {
-          localStorage.setItem("live-sessions-viewed", "true")
-        }
-      } else {
-        throw new Error(data.error || "Failed to fetch live sessions")
+      
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}))
+        throw new Error(errorData.error || "Failed to fetch live sessions")
       }
-    } catch (error) {
-      console.error("Error fetching live sessions:", error)
+
+      const data = await res.json()
+      return data
+    },
+    enabled: authStatus === "authenticated" && !!session?.user?.id,
+    staleTime: 30 * 1000, // 30 seconds
+    onError: (error) => {
       toast({
         variant: "destructive",
         title: "Error Loading Sessions",
         description: error.message || "Failed to load live sessions. Please try again.",
       })
-    } finally {
-      setLoading(false)
-    }
-  }, [session?.user?.id, toast])
+    },
+    onSuccess: () => {
+      // Mark live sessions as viewed when data loads successfully
+      if (typeof window !== "undefined") {
+        localStorage.setItem("live-sessions-viewed", "true")
+      }
+    },
+  })
 
-  useEffect(() => {
-    if (authStatus === "loading") return
+  const liveSessions = useMemo(() => {
+    return Array.isArray(liveSessionsData?.liveSessions) ? liveSessionsData.liveSessions : []
+  }, [liveSessionsData])
 
-    if (authStatus === "authenticated" && session?.user?.id) {
-      fetchLiveSessions()
-    } else if (authStatus === "unauthenticated") {
-      setLoading(false)
-    }
-  }, [authStatus, session?.user?.id, fetchLiveSessions])
+  const joinSessionMutation = useMutation({
+    mutationFn: async (sessionId) => {
+      const res = await fetch(`/api/live-sessions/${sessionId}/join`, {
+        method: "POST",
+      })
+      const data = await res.json()
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to join session")
+      }
+
+      return data
+    },
+    onSuccess: (data) => {
+      if (data.meetingUrl) {
+        // Open meeting in new tab
+        window.open(data.meetingUrl, "_blank")
+        toast({
+          title: "Joining Session",
+          description: "Opening meeting in a new tab...",
+        })
+      }
+    },
+    onError: (error) => {
+      toast({
+        variant: "destructive",
+        title: "Failed to Join",
+        description: error.message || "Failed to join session. Please try again.",
+      })
+    },
+    onSettled: () => {
+      setJoiningSession(null)
+    },
+  })
 
   const joinSession = useCallback(
     async (sessionId) => {
       setJoiningSession(sessionId)
-      try {
-        const res = await fetch(`/api/live-sessions/${sessionId}/join`, {
-          method: "POST",
-        })
-        const data = await res.json()
-
-        if (res.ok && data.meetingUrl) {
-          // Open meeting in new tab
-          window.open(data.meetingUrl, "_blank")
-          toast({
-            title: "Joining Session",
-            description: "Opening meeting in a new tab...",
-          })
-        } else {
-          throw new Error(data.error || "Failed to join session")
-        }
-      } catch (error) {
-        console.error("Error joining session:", error)
-        toast({
-          variant: "destructive",
-          title: "Failed to Join",
-          description: error.message || "Failed to join session. Please try again.",
-        })
-      } finally {
-        setJoiningSession(null)
-      }
+      joinSessionMutation.mutate(sessionId)
     },
-    [toast]
+    [joinSessionMutation]
   )
 
-  if (loading) {
+  // Show loading if query is loading OR if session is not ready yet
+  if (isLoading || authStatus === "loading" || !session?.user?.id) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background">
         <LoadingBubbles />
@@ -262,24 +272,16 @@ export default function StudentLiveSessionsPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <div className="bg-card/95 backdrop-blur-sm border-b border-border sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
-          <Link
-            href="/student"
-            className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground mb-2 sm:mb-3 font-medium transition-colors text-sm sm:text-base"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Back to Dashboard
-          </Link>
-          <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Live Sessions</h1>
-          <p className="text-sm sm:text-base text-muted-foreground mt-1">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+        {/* Header Section */}
+        <div className="mb-6 sm:mb-8">
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-foreground mb-2">
+            Live Sessions
+          </h1>
+          <p className="text-sm sm:text-base text-muted-foreground">
             Join scheduled Zoom meetings for your courses
           </p>
         </div>
-      </div>
-
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
         {liveSessions.length === 0 ? (
           <div className="bg-card rounded-xl border border-border p-8 sm:p-12 text-center">
             <Video className="w-12 h-12 sm:w-16 sm:h-16 text-muted-foreground/50 mx-auto mb-4" />

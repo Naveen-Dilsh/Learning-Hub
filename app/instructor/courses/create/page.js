@@ -3,6 +3,7 @@
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { useState, useEffect, useCallback, useMemo } from "react"
+import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useToast } from "@/hooks/use-toast"
 import Link from "next/link"
 import ImageUpload from "@/components/image-upload"
@@ -14,21 +15,26 @@ export default function CreateCourse() {
   const { data: session, status } = useSession()
   const router = useRouter()
   const { toast } = useToast()
+  const queryClient = useQueryClient()
   const [formData, setFormData] = useState({
     title: "",
     description: "",
     price: "",
     thumbnail: "",
   })
-  const [loading, setLoading] = useState(false)
   const [createdCourseId, setCreatedCourseId] = useState(null)
   const [resourcesRefreshKey, setResourcesRefreshKey] = useState(0)
 
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push("/auth/signin")
-    } else if (status === "authenticated" && session?.user?.role !== "INSTRUCTOR" && session?.user?.role !== "ADMIN") {
-      router.push("/dashboard")
+    } else if (status === "authenticated") {
+      // Block ADMIN access - redirect to allowed page
+      if (session?.user?.role === "ADMIN") {
+        router.push("/instructor/enrollments/pending")
+      } else if (session?.user?.role !== "INSTRUCTOR") {
+        router.push("/dashboard")
+      }
     }
   }, [status, session, router])
 
@@ -45,53 +51,56 @@ export default function CreateCourse() {
     return formData.title.trim() && formData.description.trim() && formData.price && formData.price > 0
   }, [formData])
 
+  const createCourseMutation = useMutation({
+    mutationFn: async (data) => {
+      const res = await fetch("/api/courses", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      })
+
+      const result = await res.json()
+
+      if (!res.ok) {
+        throw new Error(result.message || "Failed to create course")
+      }
+
+      return result
+    },
+
+    onSuccess: (data) => {
+      // Invalidate instructor courses list
+      queryClient.invalidateQueries({ queryKey: ["instructorCourses", session?.user?.id] })
+      queryClient.invalidateQueries({ queryKey: ["instructorDashboard", session?.user?.id] })
+      console.log("here",session.user.id)
+      toast({
+        title: "Course Created",
+        description: "Your course has been created successfully!",
+      })
+
+      setCreatedCourseId(data.id)
+      // Don't redirect immediately, allow user to upload resources
+    },
+    onError: (error) => {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message || "An error occurred. Please try again.",
+      })
+    },
+  })
+
   const handleSubmit = useCallback(
     async (e) => {
       e.preventDefault()
-      setLoading(true)
-
-      try {
-        const res = await fetch("/api/courses", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            title: formData.title.trim(),
-            description: formData.description.trim(),
-            price: Number.parseFloat(formData.price),
-            thumbnail: formData.thumbnail || null,
-          }),
-        })
-
-        const data = await res.json()
-
-        if (!res.ok) {
-          toast({
-            variant: "destructive",
-            title: "Error",
-            description: data.message || "Failed to create course",
-          })
-          setLoading(false)
-          return
-        }
-
-        toast({
-          title: "Course Created",
-          description: "Your course has been created successfully!",
-        })
-
-        setCreatedCourseId(data.id)
-        // Don't redirect immediately, allow user to upload resources
-      } catch (err) {
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: err.message || "An error occurred. Please try again.",
-        })
-      } finally {
-        setLoading(false)
-      }
+      createCourseMutation.mutate({
+        title: formData.title.trim(),
+        description: formData.description.trim(),
+        price: Number.parseFloat(formData.price),
+        thumbnail: formData.thumbnail || null,
+      })
     },
-    [formData, toast]
+    [formData, createCourseMutation]
   )
 
   const handleResourceUploadComplete = useCallback(() => {
@@ -297,10 +306,10 @@ export default function CreateCourse() {
             <div className="bg-muted px-5 sm:px-6 lg:px-8 py-4 sm:py-6 border-t border-border flex flex-col sm:flex-row gap-3">
               <button
                 type="submit"
-                disabled={loading || !isFormValid}
+                disabled={createCourseMutation.isPending || !isFormValid}
                 className="btn-primary flex-1 sm:flex-initial px-6 sm:px-8 py-2.5 sm:py-3 rounded-lg sm:rounded-xl font-semibold text-sm sm:text-base disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 active:scale-[0.98]"
               >
-                {loading ? (
+                {createCourseMutation.isPending ? (
                   <>
                     <div className="w-4 h-4 sm:w-5 sm:h-5 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin"></div>
                     Creating Course...

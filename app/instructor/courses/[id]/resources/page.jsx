@@ -2,73 +2,115 @@
 
 import { useSession } from "next-auth/react"
 import { useRouter, useParams } from "next/navigation"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { ArrowLeft, File, Trash2, Download, Loader2 } from "lucide-react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import PdfUploader from "@/components/pdf-uploader"
+import { useToast } from "@/hooks/use-toast"
+import LoadingBubbles from "@/components/loadingBubbles"
 
 export default function ManageResources() {
   const { data: session, status } = useSession()
   const router = useRouter()
   const params = useParams()
-  const [resources, setResources] = useState([])
-  const [course, setCourse] = useState(null)
-  const [loading, setLoading] = useState(true)
+  const { toast } = useToast()
+  const queryClient = useQueryClient()
   const [deleting, setDeleting] = useState(null)
 
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push("/auth/signin")
-    }
-  }, [status, router])
-
-  useEffect(() => {
-    if (params.id) {
-      fetchData()
-    }
-  }, [params.id])
-
-  const fetchData = async () => {
-    try {
-      const [courseRes, resourcesRes] = await Promise.all([
-        fetch(`/api/courses/${params.id}`),
-        fetch(`/api/courses/${params.id}/resources`),
-      ])
-
-      if (courseRes.ok) {
-        setCourse(await courseRes.json())
+    } else if (status === "authenticated") {
+      // Block ADMIN access - redirect to allowed page
+      if (session?.user?.role === "ADMIN") {
+        router.push("/instructor/enrollments/pending")
+      } else if (session?.user?.role !== "INSTRUCTOR") {
+        router.push("/dashboard")
       }
-      if (resourcesRes.ok) {
-        setResources(await resourcesRes.json())
-      }
-    } catch (err) {
-      console.error("Failed to fetch data:", err)
-    } finally {
-      setLoading(false)
     }
-  }
+  }, [status, session, router])
 
-  const handleDelete = async (resourceId) => {
-    if (!confirm("Are you sure you want to delete this resource?")) return
+  const {
+    data: course,
+    isLoading: courseLoading,
+  } = useQuery({
+    queryKey: ["course", params.id],
+    queryFn: async () => {
+      const res = await fetch(`/api/courses/${params.id}`, {
+        cache: "no-store",
+      })
+      
+      if (!res.ok) {
+        throw new Error("Failed to fetch course")
+      }
+      
+      return await res.json()
+    },
+    enabled: !!params.id,
+    staleTime: 60 * 1000, // 60 seconds
+  })
 
-    setDeleting(resourceId)
-    try {
+  const {
+    data: resources = [],
+    isLoading: resourcesLoading,
+  } = useQuery({
+    queryKey: ["courseResources", params.id],
+    queryFn: async () => {
+      const res = await fetch(`/api/courses/${params.id}/resources`, {
+        cache: "no-store",
+      })
+      
+      if (!res.ok) {
+        throw new Error("Failed to fetch resources")
+      }
+      
+      return await res.json()
+    },
+    enabled: !!params.id,
+    staleTime: 30 * 1000, // 30 seconds
+  })
+
+  const deleteResourceMutation = useMutation({
+    mutationFn: async (resourceId) => {
       const res = await fetch(`/api/courses/${params.id}/resources/${resourceId}`, {
         method: "DELETE",
       })
 
-      if (res.ok) {
-        setResources((prev) => prev.filter((r) => r.id !== resourceId))
+      if (!res.ok) {
+        throw new Error("Failed to delete resource")
       }
-    } catch (err) {
-      console.error("Delete failed:", err)
-    } finally {
-      setDeleting(null)
-    }
-  }
 
-  const handleDownload = async (resource) => {
+      return await res.json()
+    },
+    onSuccess: () => {
+      // Invalidate and refetch resources
+      queryClient.invalidateQueries({ queryKey: ["courseResources", params.id] })
+      
+      toast({
+        title: "Resource Deleted",
+        description: "Resource has been deleted successfully.",
+      })
+      setDeleting(null)
+    },
+    onError: (error) => {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message || "Failed to delete resource",
+      })
+      setDeleting(null)
+    },
+  })
+
+  const handleDelete = useCallback(async (resourceId) => {
+    if (!confirm("Are you sure you want to delete this resource?")) return
+    setDeleting(resourceId)
+    deleteResourceMutation.mutate(resourceId)
+  }, [deleteResourceMutation])
+
+  const handleDownload = useCallback(async (resource) => {
     try {
       const res = await fetch(`/api/courses/${params.id}/resources/${resource.id}/download`)
 
@@ -77,9 +119,13 @@ export default function ManageResources() {
       const { downloadUrl } = await res.json()
       window.open(downloadUrl, "_blank")
     } catch (err) {
-      console.error("Download failed:", err)
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to download resource",
+      })
     }
-  }
+  }, [params.id, toast])
 
   const formatFileSize = (bytes) => {
     if (bytes < 1024) return bytes + " B"
@@ -96,10 +142,14 @@ export default function ManageResources() {
     return "📁"
   }
 
-  if (status === "loading" || loading) {
+  const handleUploadComplete = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ["courseResources", params.id] })
+  }, [queryClient, params.id])
+
+  if (status === "loading" || courseLoading || resourcesLoading || !params.id) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="h-8 w-8 animate-spin" />
+        <LoadingBubbles />
       </div>
     )
   }
@@ -122,7 +172,7 @@ export default function ManageResources() {
         <div className="grid md:grid-cols-2 gap-8">
           {/* Upload Section */}
           <div>
-            <PdfUploader courseId={params.id} onUploadComplete={fetchData} />
+            <PdfUploader courseId={params.id} onUploadComplete={handleUploadComplete} />
           </div>
 
           {/* Resources List */}
@@ -156,11 +206,11 @@ export default function ManageResources() {
                         variant="ghost"
                         size="icon"
                         onClick={() => handleDelete(resource.id)}
-                        disabled={deleting === resource.id}
+                        disabled={deleting === resource.id && deleteResourceMutation.isPending}
                         title="Delete"
                         className="text-destructive hover:text-destructive"
                       >
-                        {deleting === resource.id ? (
+                        {deleting === resource.id && deleteResourceMutation.isPending ? (
                           <Loader2 className="h-4 w-4 animate-spin" />
                         ) : (
                           <Trash2 className="h-4 w-4" />

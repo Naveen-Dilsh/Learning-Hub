@@ -28,6 +28,11 @@ export async function middleware(req) {
     return NextResponse.redirect(new URL("/instructor/dashboard", req.url))
   }
 
+  // Redirect ADMIN users trying to access student-only routes
+  if (token.role === "ADMIN" && pathname.startsWith("/student")) {
+    return NextResponse.redirect(new URL("/instructor/enrollments/pending", req.url))
+  }
+
   return NextResponse.next()
 }
 
