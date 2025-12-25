@@ -6,6 +6,7 @@ import FeaturesSection from "@/components/home/FeaturesSection"
 import CoursesSection from "@/components/home/CoursesSection"
 import CTASection from "@/components/home/CTASection"
 import Footer from "@/components/home/Footer"
+import Testimonials from "@/components/home/Testimonials"
 
 export default function Home() {
   return (
@@ -15,6 +16,7 @@ export default function Home() {
       <FeaturesSection />
       <CoursesSection />
       <CTASection />
+      <Testimonials/>
       <Footer />
     </div>
   )
