@@ -6,9 +6,9 @@ import Image from "next/image"
 import { Dialog, DialogContent } from "@/components/ui/dialog"
 
 const teacherImages = [
-  { src: "/images/teacher.png", alt: "Science Teacher 1" },
-  { src: "/images/teacher.png", alt: "Science Teacher 2" },
-  { src: "/images/teacher.png", alt: "Science Teacher 3" },
+  { src: "/images/2.png", alt: "Science Teacher 1" },
+  { src: "/images/3.png", alt: "Science Teacher 2" },
+  { src: "/images/4.png", alt: "Science Teacher 3" },
 ]
 
 // Demo video URL - replace with your actual video URL
@@ -87,6 +87,7 @@ const ImageSection = ({ isMobile = false, currentImage, onImageSelect, isClient 
         gradient: "from-blue-500 to-cyan-500",
         delay: 0,
         size: isMobile ? "w-12 h-12 sm:w-16 sm:h-16" : "w-16 h-16 lg:w-20 lg:h-20",
+        zIndex: "", 
       },
       {
         icon: FlaskConical,
@@ -94,6 +95,7 @@ const ImageSection = ({ isMobile = false, currentImage, onImageSelect, isClient 
         gradient: "from-purple-500 to-pink-500",
         delay: 1,
         size: isMobile ? "w-12 h-12 sm:w-16 sm:h-16" : "w-16 h-16 lg:w-20 lg:h-20",
+        zIndex: "", 
       },
       {
         icon: Microscope,
@@ -101,6 +103,7 @@ const ImageSection = ({ isMobile = false, currentImage, onImageSelect, isClient 
         gradient: "from-green-500 to-emerald-500",
         delay: 2,
         size: isMobile ? "w-12 h-12 sm:w-16 sm:h-16" : "w-16 h-16 lg:w-20 lg:h-20",
+        zIndex: "z-30", 
       },
     ],
     [isMobile],
@@ -117,13 +120,13 @@ const ImageSection = ({ isMobile = false, currentImage, onImageSelect, isClient 
         </div>
 
         {/* Floating science icons */}
-        {iconPositions.map(({ icon, position, gradient, delay, size }) => (
+        {iconPositions.map(({ icon, position, gradient, delay, size, zIndex }) => (
           <FloatingIcon
             key={position}
             icon={icon}
             position={position}
             delay={delay}
-            className={`${size} bg-gradient-to-br ${gradient}`}
+            className={`${size} bg-gradient-to-br ${gradient} ${zIndex}`}
           />
         ))}
 
@@ -186,7 +189,7 @@ export default function HeroSection() {
   return (
     <>
       <section
-        className="relative min-h-screen flex items-center overflow-hidden bg-gradient-to-br from-[var(--hero-bg-start)] via-[var(--hero-bg-mid)] to-[var(--hero-bg-end)] lg:pt-10"
+        className="relative min-h-screen mt-5 sm:mt-16  flex items-center overflow-hidden bg-gradient-to-br from-[var(--hero-bg-start)] via-[var(--hero-bg-mid)] to-[var(--hero-bg-end)] lg:mt-5"
         style={{
           background: `linear-gradient(to bottom right, var(--hero-bg-start), var(--hero-bg-mid), var(--hero-bg-end))`,
         }}
@@ -214,7 +217,7 @@ export default function HeroSection() {
           >
             {/* Heading - First on mobile */}
             <div className="w-full lg:hidden">
-              <h1 className="text-4xl sm:text-5xl font-black leading-none text-center">
+              <h1 className="text-5xl sm:text-5xl font-black  text-center">
                 <span className="font-[family-name:var(--font-sinhala)] text-[var(--hero-text-primary)]">
                   ආස හිතෙන
                 </span>
