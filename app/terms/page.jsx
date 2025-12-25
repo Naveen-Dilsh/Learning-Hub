@@ -7,396 +7,387 @@ import Link from "next/link"
 
 export default function TermsAndConditions() {
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-[var(--hero-bg-start)]">
       <Navbar />
-      
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
-        {/* Header */}
-        <div className="mb-8 sm:mb-12">
-          <Link
-            href="/"
-            className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors mb-6"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Back to Home
-          </Link>
-          
-          <div className="flex items-center gap-4 mb-4">
-            <div className="w-12 h-12 sm:w-16 sm:h-16 bg-primary/10 rounded-xl flex items-center justify-center">
-              <FileText className="w-6 h-6 sm:w-8 sm:h-8 text-primary" />
+
+      <main className="pt-20 sm:pt-24">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pb-10 sm:pb-16">
+          {/* Header */}
+          <div className="mb-8 sm:mb-12">
+            <Link
+              href="/"
+              className="inline-flex items-center gap-2 text-sm text-[var(--hero-text-secondary)] hover:text-[var(--hero-text-primary)] transition-colors mb-6"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Back to Home
+            </Link>
+
+            <div className="flex items-center gap-4 mb-4">
+              <div className="w-12 h-12 sm:w-16 sm:h-16 bg-[var(--hero-card-bg)] border border-[var(--hero-card-border)] rounded-xl flex items-center justify-center">
+                <FileText className="w-6 h-6 sm:w-8 sm:h-8 text-[var(--hero-gradient-start)]" />
+              </div>
+              <div>
+                <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-[var(--hero-text-primary)]">
+                  Terms and Conditions
+                </h1>
+                <p className="text-xs sm:text-sm text-[var(--hero-text-secondary)] mt-2">
+                  Last updated:{" "}
+                  {new Date().toLocaleDateString("en-US", {
+                    year: "numeric",
+                    month: "long",
+                    day: "numeric",
+                  })}
+                </p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-foreground">Terms and Conditions</h1>
-              <p className="text-sm sm:text-base text-muted-foreground mt-2">Last updated: {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+          </div>
+
+          {/* Content */}
+          <div className="bg-[var(--hero-card-bg)] rounded-xl sm:rounded-2xl border border-[var(--hero-card-border)] p-6 sm:p-8 lg:p-10 space-y-8 shadow-sm">
+            {/* Introduction */}
+            <section>
+              <p className="text-sm sm:text-base text-[var(--hero-text-secondary)] leading-relaxed">
+                Welcome to{" "}
+                <span className="font-semibold text-[var(--hero-text-primary)]">
+                  e‑pencil / Asā Hithena Science
+                </span>
+                . These Terms and Conditions govern your use of our learning platform and access to our classes and
+                LMS. By using this website or enrolling in any course, you agree to these terms. Please read them
+                carefully before proceeding.
+              </p>
+            </section>
+
+            {/* Use of the Platform */}
+            <section>
+              <div className="flex items-center gap-3 mb-4">
+                <User className="w-5 h-5 sm:w-6 sm:h-6 text-[var(--hero-gradient-start)]" />
+                <h2 className="text-xl sm:text-2xl font-bold text-[var(--hero-text-primary)]">
+                  Use of the Platform
+                </h2>
+              </div>
+              <div className="pl-4 sm:pl-8 space-y-3">
+                <p className="text-sm sm:text-base text-[var(--hero-text-secondary)] leading-relaxed">
+                  <span className="font-semibold">a.</span> You must be at least{" "}
+                  <span className="font-semibold text-[var(--hero-text-primary)]">13 years old</span> to use our
+                  platform. Students under 18 should use the platform with the knowledge and consent of a parent,
+                  guardian, or school.
+                </p>
+                <p className="text-sm sm:text-base text-[var(--hero-text-secondary)] leading-relaxed">
+                  <span className="font-semibold">b.</span> You are responsible for keeping your login details
+                  confidential and for all activity under your account. Notify us promptly if you suspect unauthorised
+                  access.
+                </p>
+                <p className="text-sm sm:text-base text-[var(--hero-text-secondary)] leading-relaxed">
+                  <span className="font-semibold">c.</span> You agree to provide accurate and up‑to‑date information
+                  when creating an account or enrolling in courses.
+                </p>
+                <div>
+                  <p className="text-sm sm:text-base text-[var(--hero-text-secondary)] leading-relaxed mb-2">
+                    <span className="font-semibold">d.</span> You must not use the platform for unlawful or
+                    unauthorised purposes, including:
+                  </p>
+                  <ul className="list-disc list-inside space-y-1 text-sm sm:text-base text-[var(--hero-text-secondary)] ml-4 mt-1">
+                    <li>Sharing your account with others.</li>
+                    <li>Accessing paid content without valid enrollment.</li>
+                    <li>Copying, recording, or redistributing course materials.</li>
+                    <li>Interfering with the security or performance of the platform.</li>
+                    <li>Using bots or automated tools to access the LMS.</li>
+                    <li>Infringing any copyright or intellectual property rights.</li>
+                  </ul>
+                </div>
+              </div>
+            </section>
+
+            {/* Course Information and Pricing */}
+            <section>
+              <div className="flex items-center gap-3 mb-4">
+                <BookOpen className="w-5 h-5 sm:w-6 sm:h-6 text-[var(--hero-gradient-start)]" />
+                <h2 className="text-xl sm:text-2xl font-bold text-[var(--hero-text-primary)]">
+                  Course Information and Pricing
+                </h2>
+              </div>
+              <div className="pl-4 sm:pl-8 space-y-3">
+                <p className="text-sm sm:text-base text-[var(--hero-text-secondary)] leading-relaxed">
+                  <span className="font-semibold">a.</span> We aim to provide accurate details about each class and
+                  course (syllabus, schedules, teachers, and pricing), but small changes may occur as content and
+                  timetables are updated.
+                </p>
+                <p className="text-sm sm:text-base text-[var(--hero-text-secondary)] leading-relaxed">
+                  <span className="font-semibold">b.</span> Prices may change over time due to promotions or updates.
+                  The price you see at the time of enrollment is the price that applies to that purchase.
+                </p>
+                <p className="text-sm sm:text-base text-[var(--hero-text-secondary)] leading-relaxed">
+                  <span className="font-semibold">c.</span> We may add, pause, or discontinue courses or batches. If a
+                  course you have paid for is discontinued, we will try to offer a suitable alternative or follow our
+                  refund policy.
+                </p>
+              </div>
+            </section>
+
+            {/* Enrollment and Payments */}
+            <section>
+              <div className="flex items-center gap-3 mb-4">
+                <CreditCard className="w-5 h-5 sm:w-6 sm:h-6 text-[var(--hero-gradient-start)]" />
+                <h2 className="text-xl sm:text-2xl font-bold text-[var(--hero-text-primary)]">
+                  Enrollment and Payments
+                </h2>
+              </div>
+              <div className="pl-4 sm:pl-8 space-y-3">
+                <p className="text-sm sm:text-base text-[var(--hero-text-secondary)] leading-relaxed">
+                  <span className="font-semibold">a.</span> Enrolling in a course is an offer to purchase access to that
+                  course or batch, subject to payment confirmation and availability.
+                </p>
+                <div>
+                  <p className="text-sm sm:text-base text-[var(--hero-text-secondary)] leading-relaxed mb-2">
+                    <span className="font-semibold">b.</span> We may cancel or refuse an enrollment in situations such
+                    as:
+                  </p>
+                  <ul className="list-disc list-inside space-y-1 text-sm sm:text-base text-[var(--hero-text-secondary)] ml-4 mt-1">
+                    <li>Class capacity limits or scheduling conflicts.</li>
+                    <li>Errors in pricing or course information.</li>
+                    <li>Suspected fraud or payment issues.</li>
+                    <li>Violation of these Terms and Conditions.</li>
+                  </ul>
+                </div>
+                <p className="text-sm sm:text-base text-[var(--hero-text-secondary)] leading-relaxed">
+                  <span className="font-semibold">c.</span> You authorise us or our payment partners to charge the
+                  amount shown (including relevant taxes and fees) to your selected payment method.
+                </p>
+                <p className="text-sm sm:text-base text-[var(--hero-text-secondary)] leading-relaxed">
+                  <span className="font-semibold">d.</span> Payments are processed through secure third‑party providers.
+                  We do not store your full card details on our servers.
+                </p>
+                <p className="text-sm sm:text-base text-[var(--hero-text-secondary)] leading-relaxed">
+                  <span className="font-semibold">e.</span> After successful payment, access to the relevant course,
+                  batch, or LMS section will be activated as described on the course page.
+                </p>
+              </div>
+            </section>
+
+            {/* Course Access and Content */}
+            <section>
+              <div className="flex items-center gap-3 mb-4">
+                <BookOpen className="w-5 h-5 sm:w-6 sm:h-6 text-[var(--hero-gradient-start)]" />
+                <h2 className="text-xl sm:text-2xl font-bold text-[var(--hero-text-primary)]">
+                  Course Access and Content
+                </h2>
+              </div>
+              <div className="pl-4 sm:pl-8 space-y-3">
+                <p className="text-sm sm:text-base text-[var(--hero-text-secondary)] leading-relaxed">
+                  <span className="font-semibold">a.</span> Access duration (e.g., full year, term, or lifetime access
+                  to recordings) will be clearly stated for each course.
+                </p>
+                <p className="text-sm sm:text-base text-[var(--hero-text-secondary)] leading-relaxed">
+                  <span className="font-semibold">b.</span> Your course access is personal. You must not share login
+                  details or content with others.
+                </p>
+                <div>
+                  <p className="text-sm sm:text-base text-[var(--hero-text-secondary)] leading-relaxed mb-2">
+                    <span className="font-semibold">c.</span> All materials (videos, notes, questions, PDFs, LMS
+                    content) are protected by copyright. You may not:
+                  </p>
+                  <ul className="list-disc list-inside space-y-1 text-sm sm:text-base text-[var(--hero-text-secondary)] ml-4 mt-1">
+                    <li>Download or redistribute recordings beyond what is clearly allowed.</li>
+                    <li>Upload content to other websites, groups, or YouTube.</li>
+                    <li>Sell, share, or publicly display any course materials.</li>
+                  </ul>
+                </div>
+                <p className="text-sm sm:text-base text-[var(--hero-text-secondary)] leading-relaxed">
+                  <span className="font-semibold">d.</span> We may suspend or remove access if misuse or sharing of
+                  content is detected.
+                </p>
+              </div>
+            </section>
+
+            {/* Certificates */}
+            <section>
+              <div className="flex items-center gap-3 mb-4">
+                <FileText className="w-5 h-5 sm:w-6 sm:h-6 text-[var(--hero-gradient-start)]" />
+                <h2 className="text-xl sm:text-2xl font-bold text-[var(--hero-text-primary)]">Certificates</h2>
+              </div>
+              <div className="pl-4 sm:pl-8 space-y-3">
+                <p className="text-sm sm:text-base text-[var(--hero-text-secondary)] leading-relaxed">
+                  <span className="font-semibold">a.</span> If a course offers a certificate, it will be awarded based
+                  on the completion rules shown (for example, minimum attendance or exam completion).
+                </p>
+                <p className="text-sm sm:text-base text-[var(--hero-text-secondary)] leading-relaxed">
+                  <span className="font-semibold">b.</span> Certificates will use the name on your account. Please make
+                  sure it is correct.
+                </p>
+                <p className="text-sm sm:text-base text-[var(--hero-text-secondary)] leading-relaxed">
+                  <span className="font-semibold">c.</span> Certificates must not be altered or used to misrepresent
+                  your qualifications.
+                </p>
+              </div>
+            </section>
+
+            {/* Returns and Refunds */}
+            <section>
+              <div className="flex items-center gap-3 mb-4">
+                <FileText className="w-5 h-5 sm:w-6 sm:h-6 text-[var(--hero-gradient-start)]" />
+                <h2 className="text-xl sm:text-2xl font-bold text-[var(--hero-text-primary)]">
+                  Returns and Refunds
+                </h2>
+              </div>
+              <div className="pl-4 sm:pl-8">
+                <p className="text-sm sm:text-base text-[var(--hero-text-secondary)] leading-relaxed">
+                  Refunds are handled according to our{" "}
+                  <Link
+                    href="/refund-policy"
+                    className="text-[var(--hero-gradient-start)] hover:underline font-semibold"
+                  >
+                    Refund Policy
+                  </Link>
+                  . Please review it carefully before enrolling.
+                </p>
+              </div>
+            </section>
+
+            {/* Intellectual Property */}
+            <section>
+              <div className="flex items-center gap-3 mb-4">
+                <Lock className="w-5 h-5 sm:w-6 sm:h-6 text-[var(--hero-gradient-start)]" />
+                <h2 className="text-xl sm:text-2xl font-bold text-[var(--hero-text-primary)]">
+                  Intellectual Property
+                </h2>
+              </div>
+              <div className="pl-4 sm:pl-8 space-y-3">
+                <p className="text-sm sm:text-base text-[var(--hero-text-secondary)] leading-relaxed">
+                  <span className="font-semibold">a.</span> All logos, designs, and teaching materials belong to
+                  e‑pencil / Asā Hithena Science or our teachers and partners.
+                </p>
+                <p className="text-sm sm:text-base text-[var(--hero-text-secondary)] leading-relaxed">
+                  <span className="font-semibold">b.</span> You receive a limited, personal, non‑transferable licence to
+                  use the content for your own learning only.
+                </p>
+                <p className="text-sm sm:text-base text-[var(--hero-text-secondary)] leading-relaxed">
+                  <span className="font-semibold">c.</span> Any unauthorised reuse, resale, or public sharing of
+                  content may lead to account termination and legal action.
+                </p>
+              </div>
+            </section>
+
+            {/* User Conduct */}
+            <section>
+              <div className="flex items-center gap-3 mb-4">
+                <Shield className="w-5 h-5 sm:w-6 sm:h-6 text-[var(--hero-gradient-start)]" />
+                <h2 className="text-xl sm:text-2xl font-bold text-[var(--hero-text-primary)]">
+                  User Conduct
+                </h2>
+              </div>
+              <div className="pl-4 sm:pl-8 space-y-3">
+                <p className="text-sm sm:text-base text-[var(--hero-text-secondary)] leading-relaxed">
+                  You agree to behave respectfully on our platform. You must not:
+                </p>
+                <ul className="list-disc list-inside space-y-2 text-sm sm:text-base text-[var(--hero-text-secondary)] ml-4">
+                  <li>Harass or abuse teachers, staff, or other students.</li>
+                  <li>Post offensive, hateful, or harmful content.</li>
+                  <li>Send spam or unsolicited advertisements.</li>
+                  <li>Pretend to be someone else or give false information.</li>
+                  <li>Try to hack, bypass, or damage the platform or LMS.</li>
+                </ul>
+                <p className="text-sm sm:text-base text-[var(--hero-text-secondary)] leading-relaxed mt-2">
+                  We may suspend or close accounts that break these rules.
+                </p>
+              </div>
+            </section>
+
+            {/* Limitation of Liability */}
+            <section>
+              <div className="flex items-center gap-3 mb-4">
+                <AlertTriangle className="w-5 h-5 sm:w-6 sm:h-6 text-destructive" />
+                <h2 className="text-xl sm:text-2xl font-bold text-[var(--hero-text-primary)]">
+                  Limitation of Liability
+                </h2>
+              </div>
+              <div className="pl-4 sm:pl-8 space-y-3">
+                <p className="text-sm sm:text-base text-[var(--hero-text-secondary)] leading-relaxed">
+                  Our classes and LMS are designed to support your studies, but exam results depend on many factors
+                  (your effort, practice, etc.). We cannot guarantee specific grades or outcomes.
+                </p>
+                <p className="text-sm sm:text-base text-[var(--hero-text-secondary)] leading-relaxed">
+                  To the fullest extent permitted by law, e‑pencil / Asā Hithena Science and its teachers will not be
+                  responsible for indirect, incidental, or consequential losses arising from the use of the platform.
+                  For any claim, our total liability will not exceed the amount you paid for the course concerned.
+                </p>
+              </div>
+            </section>
+
+            {/* Amendments and Termination */}
+            <section>
+              <div className="flex items-center gap-3 mb-4">
+                <FileText className="w-5 h-5 sm:w-6 sm:h-6 text-[var(--hero-gradient-start)]" />
+                <h2 className="text-xl sm:text-2xl font-bold text-[var(--hero-text-primary)]">
+                  Amendments and Termination
+                </h2>
+              </div>
+              <div className="pl-4 sm:pl-8 space-y-3">
+                <p className="text-sm sm:text-base text-[var(--hero-text-secondary)] leading-relaxed">
+                  We may update these Terms and Conditions from time to time. The updated version will be published on
+                  this page with a new “Last updated” date.
+                </p>
+                <p className="text-sm sm:text-base text-[var(--hero-text-secondary)] leading-relaxed">
+                  Continued use of the platform after changes means you accept the new terms. We may also suspend or
+                  terminate access where necessary, for example due to non‑payment, misuse, or legal reasons.
+                </p>
+              </div>
+            </section>
+
+            {/* Governing Law */}
+            <section>
+              <div className="flex items-center gap-3 mb-4">
+                <FileText className="w-5 h-5 sm:w-6 sm:h-6 text-[var(--hero-gradient-start)]" />
+                <h2 className="text-xl sm:text-2xl font-bold text-[var(--hero-text-primary)]">
+                  Governing Law
+                </h2>
+              </div>
+              <div className="pl-4 sm:pl-8">
+                <p className="text-sm sm:text-base text-[var(--hero-text-secondary)] leading-relaxed">
+                  These Terms and Conditions are governed by the laws of Sri Lanka (or your specified jurisdiction).
+                  Any disputes will be handled by the competent courts of that jurisdiction.
+                </p>
+              </div>
+            </section>
+
+            {/* Contact Section */}
+            <section className="bg-[var(--hero-bg-mid)]/40 rounded-lg sm:rounded-xl p-6 sm:p-8 border border-[var(--hero-card-border)]">
+              <div className="flex items-center gap-3 mb-4">
+                <Mail className="w-5 h-5 sm:w-6 sm:h-6 text-[var(--hero-gradient-start)]" />
+                <h2 className="text-xl sm:text-2xl font-bold text-[var(--hero-text-primary)]">Contact Us</h2>
+              </div>
+              <div className="pl-0 sm:pl-4 space-y-4">
+                <p className="text-sm sm:text-base text-[var(--hero-text-secondary)] leading-relaxed">
+                  If you have questions about these Terms and Conditions, please contact us:
+                </p>
+                <div className="space-y-2 text-sm sm:text-base text-[var(--hero-text-secondary)]">
+                  <p className="font-semibold text-[var(--hero-text-primary)]">Contact information:</p>
+                  <ul className="list-disc list-inside space-y-1 ml-2">
+                    <li>Email: legal@epencil.lk</li>
+                    <li>Support: support@epencil.lk</li>
+                    <li>
+                      Help Center:{" "}
+                      <Link href="/student/help" className="text-[var(--hero-gradient-start)] hover:underline">
+                        Visit Help Center
+                      </Link>
+                    </li>
+                    <li>Typical response time: 24–48 hours.</li>
+                  </ul>
+                </div>
+              </div>
+            </section>
+
+            {/* Footer Note */}
+            <div className="pt-6 border-t border-[var(--hero-card-border)]">
+              <p className="text-xs sm:text-sm text-[var(--hero-text-secondary)] italic">
+                By using our website, classes, or LMS, you confirm that you have read and understood these Terms and
+                Conditions and agree to follow them. If you do not agree, please do not use the platform.
+              </p>
             </div>
           </div>
         </div>
-
-        {/* Content */}
-        <div className="bg-card rounded-xl sm:rounded-2xl border border-border p-6 sm:p-8 lg:p-10 space-y-8">
-          {/* Introduction */}
-          <section>
-            <p className="text-base sm:text-lg text-foreground leading-relaxed">
-              Welcome to <span className="font-semibold text-primary">SmartLearn</span>. These Terms and Conditions govern your use of our learning management platform and the enrollment and access to courses on our platform. By accessing and using our website, you agree to comply with these terms. Please read them carefully before proceeding with any course enrollments or transactions.
-            </p>
-          </section>
-
-          {/* Use of the Website Section */}
-          <section>
-            <div className="flex items-center gap-3 mb-4">
-              <User className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
-              <h2 className="text-2xl sm:text-3xl font-bold text-foreground">Use of the Platform</h2>
-            </div>
-            <div className="pl-8 space-y-3">
-              <div>
-                <p className="text-base sm:text-lg text-foreground leading-relaxed mb-2">
-                  <span className="font-semibold">a.</span> You must be at least <span className="font-semibold">13 years old</span> to use our platform or enroll in courses. If you are under 18, you must have parental or guardian consent to use our services.
-                </p>
-              </div>
-              <div>
-                <p className="text-base sm:text-lg text-foreground leading-relaxed mb-2">
-                  <span className="font-semibold">b.</span> You are responsible for maintaining the confidentiality of your account information, including your username and password. You agree to notify us immediately of any unauthorized use of your account.
-                </p>
-              </div>
-              <div>
-                <p className="text-base sm:text-lg text-foreground leading-relaxed mb-2">
-                  <span className="font-semibold">c.</span> You agree to provide accurate, current, and complete information during the registration and enrollment process. You are responsible for keeping your account information up to date.
-                </p>
-              </div>
-              <div>
-                <p className="text-base sm:text-lg text-foreground leading-relaxed mb-2">
-                  <span className="font-semibold">d.</span> You may not use our platform for any unlawful or unauthorized purposes, including but not limited to:
-                </p>
-                <ul className="list-disc list-inside space-y-1 text-base sm:text-lg text-foreground ml-6 mt-2">
-                  <li>Sharing your account credentials with others</li>
-                  <li>Attempting to access courses or content without proper enrollment</li>
-                  <li>Downloading, copying, or distributing course materials without authorization</li>
-                  <li>Interfering with or disrupting the platform's functionality</li>
-                  <li>Using automated systems to access the platform</li>
-                  <li>Engaging in any activity that violates intellectual property rights</li>
-                </ul>
-              </div>
-            </div>
-          </section>
-
-          {/* Course Information and Pricing Section */}
-          <section>
-            <div className="flex items-center gap-3 mb-4">
-              <BookOpen className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
-              <h2 className="text-2xl sm:text-3xl font-bold text-foreground">Course Information and Pricing</h2>
-            </div>
-            <div className="pl-8 space-y-3">
-              <div>
-                <p className="text-base sm:text-lg text-foreground leading-relaxed mb-2">
-                  <span className="font-semibold">a.</span> We strive to provide accurate course descriptions, content outlines, instructor information, and pricing. However, we do not guarantee the accuracy or completeness of such information. Course content may be updated or modified by instructors at any time.
-                </p>
-              </div>
-              <div>
-                <p className="text-base sm:text-lg text-foreground leading-relaxed mb-2">
-                  <span className="font-semibold">b.</span> Course prices are subject to change without notice. Any promotions, discounts, or special offers are valid for a limited time and may be subject to additional terms and conditions. Prices displayed are in the currency specified and may vary by region.
-                </p>
-              </div>
-              <div>
-                <p className="text-base sm:text-lg text-foreground leading-relaxed mb-2">
-                  <span className="font-semibold">c.</span> Course availability is subject to change. We reserve the right to discontinue or modify courses at any time. If a course you have enrolled in is discontinued, we will provide reasonable notice and may offer alternatives or refunds as appropriate.
-                </p>
-              </div>
-            </div>
-          </section>
-
-          {/* Enrollment and Payments Section */}
-          <section>
-            <div className="flex items-center gap-3 mb-4">
-              <CreditCard className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
-              <h2 className="text-2xl sm:text-3xl font-bold text-foreground">Enrollment and Payments</h2>
-            </div>
-            <div className="pl-8 space-y-3">
-              <div>
-                <p className="text-base sm:text-lg text-foreground leading-relaxed mb-2">
-                  <span className="font-semibold">a.</span> By enrolling in a course on our platform, you are making an offer to purchase access to that course. Enrollment is subject to payment verification and course availability.
-                </p>
-              </div>
-              <div>
-                <p className="text-base sm:text-lg text-foreground leading-relaxed mb-2">
-                  <span className="font-semibold">b.</span> We reserve the right to refuse or cancel any enrollment for any reason, including but not limited to:
-                </p>
-                <ul className="list-disc list-inside space-y-1 text-base sm:text-lg text-foreground ml-6 mt-2">
-                  <li>Course availability or capacity limitations</li>
-                  <li>Errors in pricing or course information</li>
-                  <li>Suspected fraudulent activity or payment issues</li>
-                  <li>Violation of these Terms and Conditions</li>
-                  <li>Technical or administrative issues</li>
-                </ul>
-              </div>
-              <div>
-                <p className="text-base sm:text-lg text-foreground leading-relaxed mb-2">
-                  <span className="font-semibold">c.</span> You agree to provide valid and up-to-date payment information and authorize us to charge the total enrollment amount, including applicable taxes and fees, to your chosen payment method.
-                </p>
-              </div>
-              <div>
-                <p className="text-base sm:text-lg text-foreground leading-relaxed mb-2">
-                  <span className="font-semibold">d.</span> We use trusted third-party payment processors to handle your payment information securely. We do not store or have access to your full payment details. All payment transactions are subject to the terms and conditions of the payment processor.
-                </p>
-              </div>
-              <div>
-                <p className="text-base sm:text-lg text-foreground leading-relaxed mb-2">
-                  <span className="font-semibold">e.</span> Once payment is confirmed, you will gain immediate access to the enrolled course materials, subject to the course's availability and any scheduled start dates.
-                </p>
-              </div>
-            </div>
-          </section>
-
-          {/* Course Access and Content Section */}
-          <section>
-            <div className="flex items-center gap-3 mb-4">
-              <BookOpen className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
-              <h2 className="text-2xl sm:text-3xl font-bold text-foreground">Course Access and Content</h2>
-            </div>
-            <div className="pl-8 space-y-3">
-              <div>
-                <p className="text-base sm:text-lg text-foreground leading-relaxed mb-2">
-                  <span className="font-semibold">a.</span> Upon successful enrollment and payment, you will be granted access to the course materials for the duration specified in the course description, typically for lifetime access or as otherwise stated.
-                </p>
-              </div>
-              <div>
-                <p className="text-base sm:text-lg text-foreground leading-relaxed mb-2">
-                  <span className="font-semibold">b.</span> Course access is personal and non-transferable. You may not share your account, course access, or course materials with others.
-                </p>
-              </div>
-              <div>
-                <p className="text-base sm:text-lg text-foreground leading-relaxed mb-2">
-                  <span className="font-semibold">c.</span> Course content, including videos, documents, assessments, and other materials, is protected by copyright and intellectual property laws. You may not:
-                </p>
-                <ul className="list-disc list-inside space-y-1 text-base sm:text-lg text-foreground ml-6 mt-2">
-                  <li>Download, copy, or distribute course materials without authorization</li>
-                  <li>Record, screen capture, or reproduce course content</li>
-                  <li>Share course materials with others or on public platforms</li>
-                  <li>Use course content for commercial purposes</li>
-                  <li>Reverse engineer or attempt to extract course content</li>
-                </ul>
-              </div>
-              <div>
-                <p className="text-base sm:text-lg text-foreground leading-relaxed mb-2">
-                  <span className="font-semibold">d.</span> We reserve the right to revoke course access if you violate these terms or engage in any prohibited activities.
-                </p>
-              </div>
-            </div>
-          </section>
-
-          {/* Certificates Section */}
-          <section>
-            <div className="flex items-center gap-3 mb-4">
-              <FileText className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
-              <h2 className="text-2xl sm:text-3xl font-bold text-foreground">Certificates</h2>
-            </div>
-            <div className="pl-8 space-y-3">
-              <div>
-                <p className="text-base sm:text-lg text-foreground leading-relaxed mb-2">
-                  <span className="font-semibold">a.</span> Certificates of completion are issued upon successful completion of a course, as determined by the course requirements (e.g., watching all videos, completing assessments).
-                </p>
-              </div>
-              <div>
-                <p className="text-base sm:text-lg text-foreground leading-relaxed mb-2">
-                  <span className="font-semibold">b.</span> Certificates are issued in your name as registered on your account. You may not request certificates in names other than your registered account name.
-                </p>
-              </div>
-              <div>
-                <p className="text-base sm:text-lg text-foreground leading-relaxed mb-2">
-                  <span className="font-semibold">c.</span> Certificates are for personal use and may not be used for fraudulent purposes or misrepresentation of qualifications.
-                </p>
-              </div>
-            </div>
-          </section>
-
-          {/* Returns and Refunds Section */}
-          <section>
-            <div className="flex items-center gap-3 mb-4">
-              <FileText className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
-              <h2 className="text-2xl sm:text-3xl font-bold text-foreground">Returns and Refunds</h2>
-            </div>
-            <div className="pl-8 space-y-3">
-              <p className="text-base sm:text-lg text-foreground leading-relaxed">
-                Our Refund Policy governs the process and conditions for requesting refunds for course enrollments. Please refer to our <Link href="/refund-policy" className="text-primary hover:underline font-semibold">Refund Policy</Link> for detailed information about eligibility, procedures, and timelines for refunds.
-              </p>
-            </div>
-          </section>
-
-          {/* Intellectual Property Section */}
-          <section>
-            <div className="flex items-center gap-3 mb-4">
-              <Lock className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
-              <h2 className="text-2xl sm:text-3xl font-bold text-foreground">Intellectual Property</h2>
-            </div>
-            <div className="pl-8 space-y-3">
-              <div>
-                <p className="text-base sm:text-lg text-foreground leading-relaxed mb-2">
-                  <span className="font-semibold">a.</span> All content and materials on our platform, including but not limited to text, images, logos, graphics, videos, course content, and software, are protected by intellectual property rights and are the property of SmartLearn, its instructors, or its licensors.
-                </p>
-              </div>
-              <div>
-                <p className="text-base sm:text-lg text-foreground leading-relaxed mb-2">
-                  <span className="font-semibold">b.</span> You may not use, reproduce, distribute, modify, create derivative works from, or publicly display any content from our platform without our prior written consent or the consent of the respective content owner.
-                </p>
-              </div>
-              <div>
-                <p className="text-base sm:text-lg text-foreground leading-relaxed mb-2">
-                  <span className="font-semibold">c.</span> Course instructors retain ownership of their course content. By enrolling in a course, you are granted a limited, non-exclusive, non-transferable license to access and use the course content for personal, non-commercial educational purposes only.
-                </p>
-              </div>
-              <div>
-                <p className="text-base sm:text-lg text-foreground leading-relaxed mb-2">
-                  <span className="font-semibold">d.</span> Any unauthorized use of our platform's content may result in legal action and termination of your account.
-                </p>
-              </div>
-            </div>
-          </section>
-
-          {/* User Conduct Section */}
-          <section>
-            <div className="flex items-center gap-3 mb-4">
-              <Shield className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
-              <h2 className="text-2xl sm:text-3xl font-bold text-foreground">User Conduct</h2>
-            </div>
-            <div className="pl-8 space-y-3">
-              <p className="text-base sm:text-lg text-foreground leading-relaxed">
-                You agree to use our platform in a respectful and lawful manner. Prohibited conduct includes:
-              </p>
-              <ul className="list-disc list-inside space-y-2 text-base sm:text-lg text-foreground ml-4">
-                <li>Harassing, threatening, or abusing other users or instructors</li>
-                <li>Posting offensive, defamatory, or inappropriate content</li>
-                <li>Spamming or sending unsolicited communications</li>
-                <li>Impersonating others or providing false information</li>
-                <li>Attempting to gain unauthorized access to the platform or other users' accounts</li>
-                <li>Interfering with the platform's security or functionality</li>
-                <li>Violating any applicable laws or regulations</li>
-              </ul>
-              <p className="text-base sm:text-lg text-foreground leading-relaxed mt-3">
-                We reserve the right to suspend or terminate accounts that violate these conduct guidelines.
-              </p>
-            </div>
-          </section>
-
-          {/* Limitation of Liability Section */}
-          <section>
-            <div className="flex items-center gap-3 mb-4">
-              <AlertTriangle className="w-5 h-5 sm:w-6 sm:h-6 text-destructive" />
-              <h2 className="text-2xl sm:text-3xl font-bold text-foreground">Limitation of Liability</h2>
-            </div>
-            <div className="pl-8 space-y-3">
-              <div>
-                <p className="text-base sm:text-lg text-foreground leading-relaxed mb-2">
-                  <span className="font-semibold">a.</span> In no event shall SmartLearn, its directors, employees, instructors, affiliates, or partners be liable for any direct, indirect, incidental, special, consequential, or punitive damages arising out of or in connection with your use of our platform, enrollment in courses, or the purchase and use of course content.
-                </p>
-              </div>
-              <div>
-                <p className="text-base sm:text-lg text-foreground leading-relaxed mb-2">
-                  <span className="font-semibold">b.</span> We make no warranties or representations, express or implied, regarding:
-                </p>
-                <ul className="list-disc list-inside space-y-1 text-base sm:text-lg text-foreground ml-6 mt-2">
-                  <li>The quality, accuracy, completeness, or suitability of courses offered on our platform</li>
-                  <li>The uninterrupted or error-free operation of the platform</li>
-                  <li>The accuracy of course descriptions or instructor qualifications</li>
-                  <li>The availability of courses or platform features</li>
-                  <li>The outcomes or results you may achieve from taking courses</li>
-                </ul>
-              </div>
-              <div>
-                <p className="text-base sm:text-lg text-foreground leading-relaxed mb-2">
-                  <span className="font-semibold">c.</span> Our total liability to you for any claims arising from your use of the platform shall not exceed the amount you paid for the specific course or service giving rise to the claim.
-                </p>
-              </div>
-            </div>
-          </section>
-
-          {/* Indemnification Section */}
-          <section>
-            <div className="flex items-center gap-3 mb-4">
-              <Shield className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
-              <h2 className="text-2xl sm:text-3xl font-bold text-foreground">Indemnification</h2>
-            </div>
-            <div className="pl-8 space-y-3">
-              <p className="text-base sm:text-lg text-foreground leading-relaxed">
-                You agree to indemnify, defend, and hold harmless SmartLearn, its officers, directors, employees, instructors, and affiliates from and against any claims, damages, losses, liabilities, and expenses (including legal fees) arising out of or relating to your use of the platform, violation of these Terms and Conditions, or infringement of any rights of another party.
-              </p>
-            </div>
-          </section>
-
-          {/* Amendments and Termination Section */}
-          <section>
-            <div className="flex items-center gap-3 mb-4">
-              <FileText className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
-              <h2 className="text-2xl sm:text-3xl font-bold text-foreground">Amendments and Termination</h2>
-            </div>
-            <div className="pl-8 space-y-3">
-              <div>
-                <p className="text-base sm:text-lg text-foreground leading-relaxed mb-2">
-                  <span className="font-semibold">a.</span> We reserve the right to modify, update, or terminate these Terms and Conditions at any time without prior notice. It is your responsibility to review these terms periodically for any changes.
-                </p>
-              </div>
-              <div>
-                <p className="text-base sm:text-lg text-foreground leading-relaxed mb-2">
-                  <span className="font-semibold">b.</span> Your continued use of our platform after any changes to these Terms and Conditions constitutes your acceptance of those changes.
-                </p>
-              </div>
-              <div>
-                <p className="text-base sm:text-lg text-foreground leading-relaxed mb-2">
-                  <span className="font-semibold">c.</span> We reserve the right to suspend or terminate your account and access to the platform at any time, with or without cause, including but not limited to violation of these Terms and Conditions, fraudulent activity, or non-payment.
-                </p>
-              </div>
-              <div>
-                <p className="text-base sm:text-lg text-foreground leading-relaxed mb-2">
-                  <span className="font-semibold">d.</span> Upon termination, your right to access and use the platform will immediately cease. We may delete your account and associated data, subject to our data retention policies and legal obligations.
-                </p>
-              </div>
-            </div>
-          </section>
-
-          {/* Governing Law Section */}
-          <section>
-            <div className="flex items-center gap-3 mb-4">
-              <FileText className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
-              <h2 className="text-2xl sm:text-3xl font-bold text-foreground">Governing Law</h2>
-            </div>
-            <div className="pl-8 space-y-3">
-              <p className="text-base sm:text-lg text-foreground leading-relaxed">
-                These Terms and Conditions shall be governed by and construed in accordance with the laws of [Your Jurisdiction], without regard to its conflict of law provisions. Any disputes arising from these terms or your use of the platform shall be subject to the exclusive jurisdiction of the courts in [Your Jurisdiction].
-              </p>
-            </div>
-          </section>
-
-          {/* Contact Section */}
-          <section className="bg-muted rounded-lg sm:rounded-xl p-6 sm:p-8 border border-border">
-            <div className="flex items-center gap-3 mb-4">
-              <Mail className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
-              <h2 className="text-2xl sm:text-3xl font-bold text-foreground">Contact Us</h2>
-            </div>
-            <div className="pl-8 space-y-4">
-              <p className="text-base sm:text-lg text-foreground leading-relaxed">
-                If you have any questions, concerns, or requests regarding these Terms and Conditions, please contact us using the following information:
-              </p>
-              <div className="space-y-2">
-                <p className="text-base sm:text-lg font-semibold text-foreground">Contact Information:</p>
-                <ul className="list-disc list-inside space-y-1 text-base sm:text-lg text-foreground ml-4">
-                  <li>Email: legal@smartlearn.com</li>
-                  <li>Support Email: support@smartlearn.com</li>
-                  <li>Help Center: <Link href="/student/help" className="text-primary hover:underline">Visit Help Center</Link></li>
-                  <li>Response Time: We typically respond within 24-48 hours</li>
-                </ul>
-              </div>
-            </div>
-          </section>
-
-          {/* Footer Note */}
-          <div className="pt-6 border-t border-border">
-            <p className="text-sm text-muted-foreground italic">
-              These Terms and Conditions are effective as of the date stated above. By using our platform, you acknowledge that you have read, understood, and agree to be bound by these Terms and Conditions. If you do not agree to these terms, please do not use our platform.
-            </p>
-          </div>
-        </div>
-      </div>
+      </main>
 
       <Footer />
     </div>
   )
 }
-
