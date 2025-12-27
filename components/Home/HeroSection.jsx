@@ -140,14 +140,15 @@ const ImageSection = ({ isMobile = false, currentImage, onImageSelect, isClient 
               }`}
             >
               <Image
-                src={image.src || "/placeholder.svg"}
+                src={image.src}
                 alt={image.alt}
                 fill
                 sizes={imageSizes}
-                priority={index === 0}
-                quality={85}
+                priority={index === 0} // ✅ Already correct
+                quality={75} // ⬇️ Reduce from 85 to 75
                 className="object-contain drop-shadow-2xl"
               />
+
             </div>
           ))}
         </div>
@@ -189,7 +190,7 @@ export default function HeroSection() {
   return (
     <>
       <section
-        className="relative min-h-screen mt-5 sm:mt-16  flex items-center overflow-hidden bg-gradient-to-br from-[var(--hero-bg-start)] via-[var(--hero-bg-mid)] to-[var(--hero-bg-end)] lg:mt-5"
+        className="relative min-h-screen pt-10 sm:pt-16  flex items-center overflow-hidden bg-gradient-to-br from-[var(--hero-bg-start)] via-[var(--hero-bg-mid)] to-[var(--hero-bg-end)] lg:pt-5"
         style={{
           background: `linear-gradient(to bottom right, var(--hero-bg-start), var(--hero-bg-mid), var(--hero-bg-end))`,
         }}
