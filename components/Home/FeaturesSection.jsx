@@ -57,7 +57,7 @@ export default function FeaturesSection() {
             </span>
           </h2>
           <p className="text-base sm:text-lg text-[var(--hero-text-secondary)] max-w-3xl mx-auto font-[family-name:var(--font-sinhala)]">
-            විභාග සාර්ථකත්වය සහ විශිෂ්ඨ ප්‍රතිඵල සඳහා සම්පූර්ණ සහාය
+            විභාග සාර්ථකත්වය සහ විශිෂ්ඨ ප්‍රතිඵල සඳහා සම්පූර්ණ සහය ලබාදීම 
           </p>
         </div>
 

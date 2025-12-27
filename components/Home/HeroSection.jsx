@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react"
 import { ArrowRight, Atom, FlaskConical, Microscope, Star, Play, X } from "lucide-react"
 import Image from "next/image"
 import { Dialog, DialogContent } from "@/components/ui/dialog"
+import Link from "next/link"
 
 const teacherImages = [
   { src: "/images/2.png", alt: "Science Teacher 1" },
@@ -264,8 +265,10 @@ export default function HeroSection() {
                 Explore Physics, Chemistry, and Biology through interactive lessons, virtual labs, and expert-led
                 courses. Transform your understanding of science today.
               </p>
-
+              
+              
               <div className="flex flex-col sm:flex-row gap-4">
+                <Link href="/student/browse-course">
                 <button
                   className="px-6 py-3 text-white font-semibold rounded-xl hover:shadow-2xl transition-all duration-300 flex items-center justify-center gap-2 group active:scale-95"
                   style={{
@@ -283,6 +286,7 @@ export default function HeroSection() {
                   Explore Courses
                   <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" aria-hidden="true" />
                 </button>
+                </Link>
                 <button
                   onClick={() => setIsVideoOpen(true)}
                   className="px-6 py-3 border-2 border-[var(--hero-button-secondary-border)] text-[var(--hero-button-secondary-text)] font-semibold rounded-xl hover:bg-[var(--hero-button-secondary-hover)] transition-all duration-300 flex items-center justify-center gap-2 group active:scale-95"
@@ -309,7 +313,7 @@ export default function HeroSection() {
                     }}
                     aria-label="50,000 plus students"
                   >
-                    50K+
+                    10K+
                   </p>
                   <p className="text-[var(--hero-text-secondary)] text-xs sm:text-sm mt-1 font-medium">Students</p>
                 </div>
@@ -328,7 +332,7 @@ export default function HeroSection() {
                     }}
                     aria-label="500 plus courses"
                   >
-                    500+
+                    20+
                   </p>
                   <p className="text-[var(--hero-text-secondary)] text-xs sm:text-sm mt-1 font-medium">Courses</p>
                 </div>

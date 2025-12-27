@@ -47,7 +47,7 @@ export default function Footer() {
               </div>
             </div>
             <p className="text-xs sm:text-sm text-[var(--hero-text-secondary)] font-[family-name:var(--font-sinhala)]">
-              විද්‍යාව අසීරු දේ නොව, ආස හිතෙන දෙයක් බවට පත් කරන O/L විද්‍යා පන්තිය.
+              විද්‍යාව අසීරු දෙයක් නොව, ආස හිතෙන දෙයක් බවට පත් කරන O/L විද්‍යා පන්තිය.
             </p>
           </div>
 
