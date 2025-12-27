@@ -33,44 +33,42 @@ export default function Navbar() {
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 sm:py-3.5">
         <div className="flex justify-between items-center gap-4">
-          {/* Logo */}
+          {/* Logo - FIXED */}
           <Link href="/" className="flex items-center gap-2 sm:gap-3 group cursor-pointer">
-            <div className="relative w-36 h-12 sm:w-40 sm:h-12 rounded-xl overflow-hidden shadow-lg group-hover:scale-105 transition-transform duration-300">
+            <div className="relative w-40 h-20 sm:w-44 sm:h-10 md:w-48 md:h-20">
               <Image
-                src="/images/Logo.png"
-                alt="Logo"
-                width={160}
-                height={148}
+                src="/images/logo.png"
+                alt="E-pencil Logo"
+                fill
                 priority
                 quality={90}
-                className="object-cover"
+                className="object-contain"
+                sizes="(max-width: 640px) 160px, (max-width: 768px) 176px, 192px"
               />
             </div>
           </Link>
 
           {/* Desktop Navigation */}
           <div className="hidden lg:flex items-center gap-2">
-              {navLinks.map((link) => (
-                <button
-                  key={link.href}
-                  onClick={() => {
-                    const id = link.href.replace("#", "")
-                    const el = document.getElementById(id)
-                    if (el) {
-                      const navHeight = 72 // ~px, adjust if needed
-                      const y = el.getBoundingClientRect().top + window.scrollY - navHeight
-                      window.scrollTo({ top: y, behavior: "smooth" })
-                    }
-                  }}
-                  className="px-4 py-2 text-sm md:text-[15px] font-semibold text-[var(--hero-text-secondary)] hover:text-[var(--hero-text-primary)] transition-colors font-[family-name:var(--font-sinhala)] relative group"
-                >
-                  {link.name}
-                  <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-gradient-to-r from-[var(--hero-gradient-start)] to-[var(--hero-gradient-mid)] group-hover:w-full transition-all duration-300"></span>
-                </button>
-              ))}
-            </div>
-
-
+            {navLinks.map((link) => (
+              <button
+                key={link.href}
+                onClick={() => {
+                  const id = link.href.replace("#", "")
+                  const el = document.getElementById(id)
+                  if (el) {
+                    const navHeight = 72
+                    const y = el.getBoundingClientRect().top + window.scrollY - navHeight
+                    window.scrollTo({ top: y, behavior: "smooth" })
+                  }
+                }}
+                className="px-4 py-2 text-sm md:text-[15px] font-semibold text-[var(--hero-text-secondary)] hover:text-[var(--hero-text-primary)] transition-colors font-[family-name:var(--font-sinhala)] relative group"
+              >
+                {link.name}
+                <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-gradient-to-r from-[var(--hero-gradient-start)] to-[var(--hero-gradient-mid)] group-hover:w-full transition-all duration-300"></span>
+              </button>
+            ))}
+          </div>
 
           {/* Desktop Actions */}
           <div className="hidden lg:flex gap-3 items-center">
@@ -125,7 +123,7 @@ export default function Navbar() {
                   const id = link.href.replace("#", "")
                   const el = document.getElementById(id)
                   if (el) {
-                    const navHeight = 72 // same as above
+                    const navHeight = 72
                     const y = el.getBoundingClientRect().top + window.scrollY - navHeight
                     window.scrollTo({ top: y, behavior: "smooth" })
                   }
@@ -144,8 +142,6 @@ export default function Navbar() {
                 </div>
               </button>
             ))}
-
-            
 
             <div className="mt-4 pt-4 border-t border-border flex flex-col gap-2">
               <Link href="/auth/signin" onClick={() => setMobileMenuOpen(false)}>

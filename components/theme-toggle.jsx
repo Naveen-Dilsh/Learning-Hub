@@ -11,21 +11,26 @@ export function ThemeToggle() {
     setMounted(true)
   }, [])
 
-  if (!mounted) {
-    return (
-      <button className="w-10 h-10 rounded-lg flex items-center justify-center bg-muted">
-        <div className="w-5 h-5" />
-      </button>
-    )
-  }
-
+  // ✅ CRITICAL FIX: Return the same structure during SSR and client-side
+  // This prevents hydration mismatch that was causing navbar re-renders
   return (
     <button
-      onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+      onClick={() => mounted && setTheme(theme === "dark" ? "light" : "dark")}
       className="w-10 h-10 rounded-lg flex items-center justify-center hover:bg-muted transition-colors"
       aria-label="Toggle theme"
+      suppressHydrationWarning
     >
-      {theme === "dark" ? (
+      {!mounted ? (
+        // Show sun icon as default during SSR (matches most common light theme)
+        <svg className="w-5 h-5 text-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"
+          />
+        </svg>
+      ) : theme === "dark" ? (
         <svg className="w-5 h-5 text-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path
             strokeLinecap="round"

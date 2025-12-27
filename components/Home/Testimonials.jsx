@@ -231,9 +231,9 @@ export default function TestimonialsSection() {
                   </div>
                 ))}
               </div>
-              <span className="text-sm font-semibold text-[var(--hero-text-secondary)]">
+              {/* <span className="text-sm font-semibold text-[var(--hero-text-secondary)]">
                 <span className="text-[var(--hero-text-primary)] font-bold">50,000+</span> සතුටු සිසුන්
-              </span>
+              </span> */}
             </div>
           </div>
         </div>
