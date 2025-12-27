@@ -64,8 +64,10 @@ export default function TeacherProfileSection() {
                       fill
                       sizes="(max-width: 768px) 350px, 400px"
                       className="object-cover"
-                      priority
+                      loading="lazy" // ✅ Add this
+                      quality={80} // ✅ Add this
                     />
+
                   </div>
 
                   {/* Floating Achievement Badge */}

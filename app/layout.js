@@ -2,23 +2,31 @@ import "./globals.css"
 import { Providers } from "@/components/providers"
 import { Inter, Maname, Shrikhand } from "next/font/google"
 
+// ✅ GOOD - Only 3 weights
 const inter = Inter({
   subsets: ["latin"],
+  weight: ['400', '600', '700'], // Only what you use
   display: "swap",
   variable: "--font-sans",
+  preload: true, // Load faster
 })
 
 const sinhala = Maname({
   subsets: ["sinhala"],
-  weight: ["400"],
+  weight: ["400"], // Add bold too
   variable: "--font-sinhala",
+  display: "swap",
+  preload: true,
 })
 
 const shrikhand = Shrikhand({
   subsets: ["latin"],
   weight: ["400"],
   variable: "--font-display",
+  display: "swap",
+  preload: true,
 })
+
 
 export const metadata = {
   title: "SmartLearn LMS - Modern Learning Platform",

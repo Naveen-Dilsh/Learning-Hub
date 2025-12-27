@@ -39,9 +39,11 @@ export default function Navbar() {
               <Image
                 src="/images/Logo.png"
                 alt="Logo"
-                fill
-                className="object-cover"
+                width={160}
+                height={148}
                 priority
+                quality={90}
+                className="object-cover"
               />
             </div>
           </Link>
