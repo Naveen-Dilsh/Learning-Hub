@@ -49,7 +49,7 @@ export default function TermsAndConditions() {
               <p className="text-sm sm:text-base text-[var(--hero-text-secondary)] leading-relaxed">
                 Welcome to{" "}
                 <span className="font-semibold text-[var(--hero-text-primary)]">
-                  e‑pencil / Asā Hithena Science
+                  e‑pencil academy
                 </span>
                 . These Terms and Conditions govern your use of our learning platform and access to our classes and
                 LMS. By using this website or enrolling in any course, you agree to these terms. Please read them
@@ -254,7 +254,7 @@ export default function TermsAndConditions() {
               <div className="pl-4 sm:pl-8 space-y-3">
                 <p className="text-sm sm:text-base text-[var(--hero-text-secondary)] leading-relaxed">
                   <span className="font-semibold">a.</span> All logos, designs, and teaching materials belong to
-                  e‑pencil / Asā Hithena Science or our teachers and partners.
+                  e‑pencil academy or our teachers and partners.
                 </p>
                 <p className="text-sm sm:text-base text-[var(--hero-text-secondary)] leading-relaxed">
                   <span className="font-semibold">b.</span> You receive a limited, personal, non‑transferable licence to
@@ -362,8 +362,8 @@ export default function TermsAndConditions() {
                 <div className="space-y-2 text-sm sm:text-base text-[var(--hero-text-secondary)]">
                   <p className="font-semibold text-[var(--hero-text-primary)]">Contact information:</p>
                   <ul className="list-disc list-inside space-y-1 ml-2">
-                    <li>Email: legal@epencil.lk</li>
-                    <li>Support: support@epencil.lk</li>
+                    <li>Email: legal@epencilacademy.com</li>
+                    <li>Support: support@epencilacademy.com</li>
                     <li>
                       Help Center:{" "}
                       <Link href="/student/help" className="text-[var(--hero-gradient-start)] hover:underline">
