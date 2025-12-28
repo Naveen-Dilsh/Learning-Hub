@@ -49,7 +49,7 @@ export default function PrivacyPolicy() {
               <p className="text-sm sm:text-base text-[var(--hero-text-secondary)] leading-relaxed">
                 At{" "}
                 <span className="font-semibold text-[var(--hero-text-primary)]">
-                  e‑pencil / Asā Hithena Science
+                  e‑pencil academy
                 </span>
                 , we are committed to protecting the privacy and security of our learners. This Privacy Policy explains
                 how we collect, use, and safeguard your information when you visit or use our learning platform. By
@@ -366,8 +366,8 @@ export default function PrivacyPolicy() {
                 <div className="space-y-2 text-sm sm:text-base text-[var(--hero-text-secondary)]">
                   <p className="font-semibold text-[var(--hero-text-primary)]">Contact information:</p>
                   <ul className="list-disc list-inside space-y-1 ml-2">
-                    <li>Email: privacy@epencil.lk</li>
-                    <li>Support: support@epencil.lk</li>
+                    <li>Email: privacy@epencilacademy.com</li>
+                    <li>Support: support@epencilacademy.com</li>
                     <li>
                       Help Center:{" "}
                       <Link href="/student/help" className="text-[var(--hero-gradient-start)] hover:underline">

@@ -49,7 +49,7 @@ export default function RefundPolicy() {
             <section>
               <p className="text-sm sm:text-base text-[var(--hero-text-secondary)] leading-relaxed">
                 Thank you for choosing{" "}
-                <span className="font-semibold text-[var(--hero-text-primary)]">e‑pencil / Asā Hithena Science</span>.
+                <span className="font-semibold text-[var(--hero-text-primary)]">e‑pencil academy</span>.
                 We value your satisfaction and strive to provide you with the best online and physical learning
                 experience possible. If, for any reason, you are not completely satisfied with your course purchase,
                 we are here to help.
@@ -222,9 +222,9 @@ export default function RefundPolicy() {
             {/* Footer Note */}
             <div className="pt-6 border-t border-[var(--hero-card-border)]">
               <p className="text-xs sm:text-sm text-[var(--hero-text-secondary)] italic">
-                This refund policy is subject to change. We recommend reviewing this page periodically for any
+                {/* This refund policy is subject to change. We recommend reviewing this page periodically for any
                 updates. Your continued use of our services after changes to this policy constitutes acceptance of
-                those changes.
+                those changes. */}
               </p>
             </div>
           </div>
