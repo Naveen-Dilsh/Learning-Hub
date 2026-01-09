@@ -65,9 +65,9 @@ export default function RefundPolicy() {
               <div className="pl-4 sm:pl-8 space-y-3">
                 <p className="text-sm sm:text-base text-[var(--hero-text-secondary)] leading-relaxed">
                   We accept refund requests within{" "}
-                  <span className="font-semibold text-[var(--hero-text-primary)]">7 days</span> from the date of
+                  <span className="font-semibold text-[var(--hero-text-primary)]">3 days</span> from the date of
                   purchase. To be eligible for a refund, you must not have completed more than{" "}
-                  <span className="font-semibold text-[var(--hero-text-primary)]">20%</span> of the course content
+                  <span className="font-semibold text-[var(--hero-text-primary)]">10%</span> of the course content
                   (videos watched, assessments completed, etc.).
                 </p>
                 <p className="text-sm sm:text-base text-[var(--hero-text-secondary)] leading-relaxed">
