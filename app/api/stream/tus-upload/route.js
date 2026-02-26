@@ -77,7 +77,7 @@ export async function POST(request) {
   } catch (error) {
     console.error("[stream] Error creating direct upload:", error)
     return NextResponse.json(
-      { message: "Internal server error", detail: error.message },
+      { message: error.message || "Internal server error" },
       { status: 500 }
     )
   }
