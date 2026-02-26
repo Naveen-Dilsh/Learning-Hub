@@ -74,43 +74,26 @@ export default function TusVideoUploader({ courseId, onUploadComplete }) {
 
       const { uploadUrl, mediaId } = await initResponse.json()
 
-      // Step 2: Upload chunks DIRECTLY from the browser to Cloudflare Stream
-      // (bypasses Vercel entirely — no size limit, no timeout)
-      const CHUNK_SIZE = 50 * 1024 * 1024 // 50MB chunks — Cloudflare's recommended size
-      const totalSize = selectedFile.size
-      let offset = 0
+      // Step 2: Upload file DIRECTLY from browser to Cloudflare Stream
+      // uploadUrl is a CORS-enabled one-time URL — no Vercel involved, no size/timeout limits
+      setProgress(10) // show initial progress
 
-      while (offset < totalSize) {
-        if (abortControllerRef.current?.signal.aborted) {
-          throw new Error("AbortError")
-        }
+      const formData = new FormData()
+      formData.append("file", selectedFile)
 
-        const chunk = selectedFile.slice(offset, offset + CHUNK_SIZE)
-        const chunkBuffer = await chunk.arrayBuffer()
+      const uploadResponse = await fetch(uploadUrl, {
+        method: "POST",
+        body: formData,
+        signal: abortControllerRef.current?.signal,
+      })
 
-        const patchResponse = await fetch(uploadUrl, {
-          method: "PATCH",
-          headers: {
-            "Tus-Resumable": "1.0.0",
-            "Upload-Offset": String(offset),
-            "Content-Type": "application/offset+octet-stream",
-            "Content-Length": String(chunkBuffer.byteLength),
-          },
-          body: chunkBuffer,
-          signal: abortControllerRef.current?.signal,
-        })
-
-        if (!patchResponse.ok) {
-          const text = await patchResponse.text().catch(() => "")
-          throw new Error(`Chunk upload failed (${patchResponse.status}): ${text}`)
-        }
-
-        const newOffset = parseInt(patchResponse.headers.get("Upload-Offset") || "0")
-        offset = newOffset
-
-        const progressPercentage = Math.round((offset / totalSize) * 100)
-        setProgress(progressPercentage)
+      if (!uploadResponse.ok) {
+        const text = await uploadResponse.text().catch(() => "")
+        throw new Error(`Upload failed (${uploadResponse.status}): ${text}`)
       }
+
+      setProgress(90)
+
 
       // Step 3: Save video record to database
       const createRes = await fetch(`/api/instructor/videos/upload`, {
