@@ -30,9 +30,9 @@ export default function TusVideoUploader({ courseId, onUploadComplete }) {
         return
       }
       setSelectedFile(file)
-      setVideoDetails({ 
-        title: file.name.replace(/\.[^/.]+$/, ""), 
-        description: "" 
+      setVideoDetails({
+        title: file.name.replace(/\.[^/.]+$/, ""),
+        description: ""
       })
       setError(null)
       setSuccess(false)
@@ -53,7 +53,8 @@ export default function TusVideoUploader({ courseId, onUploadComplete }) {
     abortControllerRef.current = new AbortController()
 
     try {
-      // Step 1: Initiate tus upload
+      // Step 1: Ask our API to create a Cloudflare Stream TUS upload slot
+      // This returns a one-time uploadUrl pointing directly to Cloudflare Stream
       const initResponse = await fetch("/api/stream/tus-upload", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -71,37 +72,47 @@ export default function TusVideoUploader({ courseId, onUploadComplete }) {
         throw new Error(errorData.message || "Failed to initiate upload")
       }
 
-      const { uploadUrl, mediaId, chunkSize } = await initResponse.json()
+      const { uploadUrl, mediaId } = await initResponse.json()
 
-      // Step 2: Upload file in chunks
+      // Step 2: Upload chunks DIRECTLY from the browser to Cloudflare Stream
+      // (bypasses Vercel entirely — no size limit, no timeout)
+      const CHUNK_SIZE = 50 * 1024 * 1024 // 50MB chunks — Cloudflare's recommended size
       const totalSize = selectedFile.size
       let offset = 0
 
       while (offset < totalSize) {
-        const chunk = selectedFile.slice(offset, offset + chunkSize)
-        const chunkData = new FormData()
-        chunkData.append("chunk", chunk)
-        chunkData.append("uploadUrl", uploadUrl)
-        chunkData.append("offset", offset.toString())
-
-        const chunkResponse = await fetch("/api/stream/tus-chunk", {
-          method: "POST",
-          body: chunkData,
-          signal: abortControllerRef.current.signal,
-        })
-
-        if (!chunkResponse.ok) {
-          throw new Error("Failed to upload chunk")
+        if (abortControllerRef.current?.signal.aborted) {
+          throw new Error("AbortError")
         }
 
-        const { offset: newOffset } = await chunkResponse.json()
+        const chunk = selectedFile.slice(offset, offset + CHUNK_SIZE)
+        const chunkBuffer = await chunk.arrayBuffer()
+
+        const patchResponse = await fetch(uploadUrl, {
+          method: "PATCH",
+          headers: {
+            "Tus-Resumable": "1.0.0",
+            "Upload-Offset": String(offset),
+            "Content-Type": "application/offset+octet-stream",
+            "Content-Length": String(chunkBuffer.byteLength),
+          },
+          body: chunkBuffer,
+          signal: abortControllerRef.current?.signal,
+        })
+
+        if (!patchResponse.ok) {
+          const text = await patchResponse.text().catch(() => "")
+          throw new Error(`Chunk upload failed (${patchResponse.status}): ${text}`)
+        }
+
+        const newOffset = parseInt(patchResponse.headers.get("Upload-Offset") || "0")
         offset = newOffset
 
         const progressPercentage = Math.round((offset / totalSize) * 100)
         setProgress(progressPercentage)
       }
 
-      // Step 3: Save to database with title and description
+      // Step 3: Save video record to database
       const createRes = await fetch(`/api/instructor/videos/upload`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -121,26 +132,14 @@ export default function TusVideoUploader({ courseId, onUploadComplete }) {
 
       setSuccess(true)
       setProgress(100)
-      
-      // Immediately refetch course data to show new video
-      await queryClient.refetchQueries({ 
+
+      await queryClient.refetchQueries({
         queryKey: ["course", courseId],
-        exact: true 
+        exact: true
       })
-      
-      // Also invalidate related queries for course data
-      queryClient.invalidateQueries({ 
-        queryKey: ["course", courseId],
-        exact: false 
-      })
-      
-      // Invalidate instructor courses list to update video counts
-      queryClient.invalidateQueries({ 
-        queryKey: ["instructorCourses"],
-        exact: false 
-      })
-      
-      // Call the callback if provided
+      queryClient.invalidateQueries({ queryKey: ["course", courseId], exact: false })
+      queryClient.invalidateQueries({ queryKey: ["instructorCourses"], exact: false })
+
       onUploadComplete?.(mediaId)
 
       toast({
@@ -148,7 +147,6 @@ export default function TusVideoUploader({ courseId, onUploadComplete }) {
         description: "Video uploaded successfully!",
       })
 
-      // Reset after success
       setTimeout(() => {
         setSelectedFile(null)
         setSuccess(false)
@@ -159,7 +157,7 @@ export default function TusVideoUploader({ courseId, onUploadComplete }) {
         }
       }, 3000)
     } catch (err) {
-      if (err.name === "AbortError") {
+      if (err.name === "AbortError" || err.message === "AbortError") {
         setError("Upload cancelled")
         toast({
           title: "Upload Cancelled",
@@ -181,6 +179,7 @@ export default function TusVideoUploader({ courseId, onUploadComplete }) {
       abortControllerRef.current = null
     }
   }, [selectedFile, videoDetails, courseId, onUploadComplete, toast, queryClient])
+
 
   const cancelUpload = useCallback(() => {
     if (abortControllerRef.current) {
@@ -214,7 +213,7 @@ export default function TusVideoUploader({ courseId, onUploadComplete }) {
                 </div>
               </div>
             </div>
-            
+
             <div className="p-4 sm:p-6 space-y-4">
               <div className="bg-muted border border-border rounded-lg p-3">
                 <div className="flex items-center gap-2">
@@ -291,7 +290,7 @@ export default function TusVideoUploader({ courseId, onUploadComplete }) {
         <div className="p-4 sm:p-6">
           {!selectedFile || success ? (
             <div>
-              <label 
+              <label
                 htmlFor="video-upload"
                 className="flex flex-col items-center justify-center w-full px-4 sm:px-6 py-8 sm:py-12 border-2 border-dashed border-input rounded-xl sm:rounded-2xl cursor-pointer hover:bg-gradient-to-br hover:from-primary/5 hover:to-secondary/5 hover:border-primary transition-all duration-200 group"
               >
