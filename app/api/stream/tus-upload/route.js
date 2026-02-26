@@ -46,7 +46,7 @@ export async function POST(request) {
     return NextResponse.json({
       uploadUrl: location,
       mediaId,
-      chunkSize: 52428800, // 50 MB chunks
+      chunkSize: 4 * 1024 * 1024, // 4MB — must stay under Vercel's 4.5MB body limit
     })
   } catch (error) {
     console.error("[v0] Error initiating tus upload:", error)

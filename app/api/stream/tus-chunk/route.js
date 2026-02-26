@@ -3,6 +3,14 @@ import { authOptions } from "@/lib/auth"
 import { NextResponse } from "next/server"
 import { uploadTusChunk } from "@/lib/cloudflare-stream"
 
+// ✅ Fix Vercel 413: video chunks must bypass the 4.5MB body size limit
+export const config = {
+  api: {
+    bodyParser: false,
+    responseLimit: false,
+  },
+}
+
 export async function POST(request) {
   try {
     const session = await getServerSession(authOptions)
