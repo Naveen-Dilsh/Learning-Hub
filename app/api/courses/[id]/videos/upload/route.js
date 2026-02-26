@@ -4,11 +4,18 @@ import { authOptions } from "@/lib/auth"
 import { uploadVideoToCloudflare } from "@/lib/cloudflare-stream"
 import { NextResponse } from "next/server"
 
+// ✅ Fix Vercel 413: Disable body size limit for file uploads
+export const config = {
+  api: {
+    bodyParser: false,
+    responseLimit: false,
+  },
+}
+
 export async function POST(request, { params }) {
   try {
-    // ✅ FIX: Await params
     const resolvedParams = await params;
-    
+
     const session = await getServerSession(authOptions)
 
     if (!session) {
@@ -47,9 +54,9 @@ export async function POST(request, { params }) {
     })
   } catch (error) {
     console.error("Error uploading video:", error)
-    return NextResponse.json({ 
+    return NextResponse.json({
       message: "Internal server error",
-      error: error.message 
+      error: error.message
     }, { status: 500 })
   }
 }
