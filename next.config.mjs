@@ -82,7 +82,7 @@ const nextConfig = {
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: https: blob: https://imagedelivery.net",
               "font-src 'self' data:",
-              "connect-src 'self' https://*.cloudflarestream.com https://api.cloudflare.com https://upload.imagedelivery.net https://*.r2.cloudflarestorage.com wss://*.cloudflarestream.com",
+              "connect-src 'self' https://*.cloudflarestream.com https://api.cloudflare.com https://*.gateway.api.cloudflare.com https://upload.imagedelivery.net https://*.r2.cloudflarestorage.com wss://*.cloudflarestream.com",
               "frame-src 'self' https://*.cloudflarestream.com",
               "media-src 'self' https://*.cloudflarestream.com blob:",
               "worker-src 'self' blob:",
