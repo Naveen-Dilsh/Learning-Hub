@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useRef, useCallback } from "react"
+import * as tus from "tus-js-client"
 import { useQueryClient } from "@tanstack/react-query"
 import { Upload, X, CheckCircle, AlertCircle, Video, FileVideo } from 'lucide-react'
 import { useToast } from "@/hooks/use-toast"
@@ -16,7 +17,7 @@ export default function TusVideoUploader({ courseId, onUploadComplete }) {
   const [showDetailsModal, setShowDetailsModal] = useState(false)
   const [videoDetails, setVideoDetails] = useState({ title: "", description: "" })
   const fileInputRef = useRef(null)
-  const abortControllerRef = useRef(null)
+  const tusUploadRef = useRef(null)
 
   const handleFileSelect = useCallback((e) => {
     const file = e.target.files?.[0]
@@ -50,11 +51,9 @@ export default function TusVideoUploader({ courseId, onUploadComplete }) {
     setUploading(true)
     setProgress(0)
     setError(null)
-    abortControllerRef.current = new AbortController()
 
     try {
-      // Step 1: Ask our API to create a Cloudflare Stream TUS upload slot
-      // This returns a one-time uploadUrl pointing directly to Cloudflare Stream
+      // Step 1: Get a Cloudflare TUS upload URL from our API
       const initResponse = await fetch("/api/stream/tus-upload", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -64,7 +63,6 @@ export default function TusVideoUploader({ courseId, onUploadComplete }) {
           fileType: selectedFile.type,
           courseId,
         }),
-        signal: abortControllerRef.current.signal,
       })
 
       if (!initResponse.ok) {
@@ -74,33 +72,39 @@ export default function TusVideoUploader({ courseId, onUploadComplete }) {
 
       const { uploadUrl, mediaId } = await initResponse.json()
 
-      // Step 2: Upload file DIRECTLY from browser to Cloudflare Stream
-      // uploadUrl is a CORS-enabled one-time URL — no Vercel involved, no size/timeout limits
-      setProgress(10) // show initial progress
+      // Step 2: Upload directly from browser to Cloudflare Stream using tus-js-client
+      // tus-js-client handles CORS, chunking, retries automatically
+      await new Promise((resolve, reject) => {
+        const upload = new tus.Upload(selectedFile, {
+          uploadUrl,                         // The Cloudflare TUS URL
+          chunkSize: 50 * 1024 * 1024,       // 50MB chunks
+          retryDelays: [0, 1000, 3000, 5000],// Auto-retry on failure
+          metadata: {
+            filename: selectedFile.name,
+            filetype: selectedFile.type,
+          },
+          onProgress(bytesUploaded, bytesTotal) {
+            const pct = Math.round((bytesUploaded / bytesTotal) * 100)
+            setProgress(pct)
+          },
+          onSuccess() {
+            resolve()
+          },
+          onError(err) {
+            reject(err)
+          },
+        })
 
-      const formData = new FormData()
-      formData.append("file", selectedFile)
-
-      const uploadResponse = await fetch(uploadUrl, {
-        method: "POST",
-        body: formData,
-        signal: abortControllerRef.current?.signal,
+        tusUploadRef.current = upload
+        upload.start()
       })
-
-      if (!uploadResponse.ok) {
-        const text = await uploadResponse.text().catch(() => "")
-        throw new Error(`Upload failed (${uploadResponse.status}): ${text}`)
-      }
-
-      setProgress(90)
-
 
       // Step 3: Save video record to database
       const createRes = await fetch(`/api/instructor/videos/upload`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          courseId: courseId,
+          courseId,
           title: videoDetails.title,
           description: videoDetails.description,
           cloudflareStreamId: mediaId,
@@ -116,57 +120,42 @@ export default function TusVideoUploader({ courseId, onUploadComplete }) {
       setSuccess(true)
       setProgress(100)
 
-      await queryClient.refetchQueries({
-        queryKey: ["course", courseId],
-        exact: true
-      })
+      await queryClient.refetchQueries({ queryKey: ["course", courseId], exact: true })
       queryClient.invalidateQueries({ queryKey: ["course", courseId], exact: false })
       queryClient.invalidateQueries({ queryKey: ["instructorCourses"], exact: false })
 
       onUploadComplete?.(mediaId)
 
-      toast({
-        title: "Success",
-        description: "Video uploaded successfully!",
-      })
+      toast({ title: "Success", description: "Video uploaded successfully!" })
 
       setTimeout(() => {
         setSelectedFile(null)
         setSuccess(false)
         setProgress(0)
         setVideoDetails({ title: "", description: "" })
-        if (fileInputRef.current) {
-          fileInputRef.current.value = ""
-        }
+        if (fileInputRef.current) fileInputRef.current.value = ""
       }, 3000)
+
     } catch (err) {
-      if (err.name === "AbortError" || err.message === "AbortError") {
+      if (err?.message?.includes("abort") || err?.message?.includes("cancel")) {
         setError("Upload cancelled")
-        toast({
-          title: "Upload Cancelled",
-          description: "The upload was cancelled",
-        })
+        toast({ title: "Upload Cancelled", description: "The upload was cancelled" })
       } else {
         console.error("Upload error:", err)
         const errorMessage = err.message || "Upload failed"
         setError(errorMessage)
-        toast({
-          title: "Upload Failed",
-          description: errorMessage,
-          variant: "destructive",
-        })
+        toast({ title: "Upload Failed", description: errorMessage, variant: "destructive" })
       }
       setProgress(0)
     } finally {
       setUploading(false)
-      abortControllerRef.current = null
+      tusUploadRef.current = null
     }
   }, [selectedFile, videoDetails, courseId, onUploadComplete, toast, queryClient])
 
-
   const cancelUpload = useCallback(() => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort()
+    if (tusUploadRef.current) {
+      tusUploadRef.current.abort()
     }
   }, [])
 
@@ -174,9 +163,7 @@ export default function TusVideoUploader({ courseId, onUploadComplete }) {
     setShowDetailsModal(false)
     setSelectedFile(null)
     setVideoDetails({ title: "", description: "" })
-    if (fileInputRef.current) {
-      fileInputRef.current.value = ""
-    }
+    if (fileInputRef.current) fileInputRef.current.value = ""
   }, [])
 
   return (
@@ -281,20 +268,14 @@ export default function TusVideoUploader({ courseId, onUploadComplete }) {
                   <div className="w-12 h-12 sm:w-16 sm:h-16 bg-gradient-to-br from-primary/10 to-secondary/10 rounded-xl sm:rounded-2xl flex items-center justify-center mx-auto mb-3 sm:mb-4 group-hover:scale-110 group-hover:shadow-lg transition-all duration-200">
                     <Upload className="w-6 h-6 sm:w-8 sm:h-8 text-primary" />
                   </div>
-                  <p className="text-foreground font-semibold text-base sm:text-lg mb-1">
-                    Click to select video
-                  </p>
-                  <p className="text-xs sm:text-sm text-muted-foreground mb-2 sm:mb-3">
-                    or drag and drop your file here
-                  </p>
+                  <p className="text-foreground font-semibold text-base sm:text-lg mb-1">Click to select video</p>
+                  <p className="text-xs sm:text-sm text-muted-foreground mb-2 sm:mb-3">or drag and drop your file here</p>
                   <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
                     <span className="px-2 sm:px-3 py-1 bg-muted rounded-full">MP4</span>
                     <span className="px-2 sm:px-3 py-1 bg-muted rounded-full">WebM</span>
                     <span className="px-2 sm:px-3 py-1 bg-muted rounded-full">MOV</span>
                   </div>
-                  <p className="text-xs text-muted-foreground mt-2 sm:mt-3">
-                    Maximum file size: 10GB
-                  </p>
+                  <p className="text-xs text-muted-foreground mt-2 sm:mt-3">Maximum file size: 30GB</p>
                 </div>
               </label>
               <input
@@ -321,9 +302,7 @@ export default function TusVideoUploader({ courseId, onUploadComplete }) {
                     {(selectedFile.size / (1024 * 1024)).toFixed(2)} MB
                   </p>
                   {videoDetails.description && (
-                    <p className="text-xs text-muted-foreground mt-2 line-clamp-2">
-                      {videoDetails.description}
-                    </p>
+                    <p className="text-xs text-muted-foreground mt-2 line-clamp-2">{videoDetails.description}</p>
                   )}
                 </div>
                 {!uploading && (
@@ -351,7 +330,7 @@ export default function TusVideoUploader({ courseId, onUploadComplete }) {
                     </div>
                   </div>
                   <p className="text-xs text-muted-foreground text-center">
-                    Please don't close this page while uploading
+                    Please don&apos;t close this page while uploading
                   </p>
                 </div>
               )}
