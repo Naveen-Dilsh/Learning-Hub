@@ -2,8 +2,9 @@
 
 import { useState, useCallback } from "react"
 import { useToast } from "@/hooks/use-toast"
-import { Mail, ArrowRight, ArrowLeft, GraduationCap, CheckCircle } from "lucide-react"
+import { Mail, ArrowRight, ArrowLeft, CheckCircle } from "lucide-react"
 import Link from "next/link"
+import Image from "next/image"
 
 export default function ForgotPassword() {
     const { toast } = useToast()
@@ -53,10 +54,10 @@ export default function ForgotPassword() {
             <div className="w-full max-w-md mx-auto">
                 {/* Logo */}
                 <div className="flex items-center gap-2 mb-8 justify-center">
-                    <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center shadow-lg">
-                        <GraduationCap className="w-6 h-6 text-primary-foreground" />
+                    <div className="relative w-11 h-11 flex-shrink-0">
+                        <Image src="/images/logo.png" alt="ePencil Academy" fill className="object-contain" priority />
                     </div>
-                    <h1 className="text-xl font-bold text-foreground">SmartLearn</h1>
+                    <h1 className="text-xl font-bold text-foreground">ePencil Academy</h1>
                 </div>
 
                 <div className="bg-card rounded-xl shadow-sm border border-border p-6 sm:p-8">

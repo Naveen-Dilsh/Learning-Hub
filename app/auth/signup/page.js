@@ -132,11 +132,11 @@ export default function SignUp() {
           <div className="space-y-8">
             {/* Logo */}
             <div className="flex items-center gap-3">
-              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center shadow-xl">
-                <GraduationCap className="w-7 h-7 text-primary-foreground" />
+              <div className="relative w-14 h-14 flex-shrink-0">
+                <Image src="/images/logo.png" alt="ePencil Academy" fill className="object-contain" priority />
               </div>
               <div>
-                <h1 className="text-3xl font-bold text-foreground tracking-tight">SmartLearn</h1>
+                <h1 className="text-3xl font-bold text-foreground tracking-tight">ePencil Academy</h1>
                 <p className="text-sm text-muted-foreground font-medium mt-0.5">Learn. Discover. Excel.</p>
               </div>
             </div>
@@ -172,10 +172,10 @@ export default function SignUp() {
           <div className="bg-card rounded-xl shadow-sm border border-border p-5 sm:p-6 lg:p-8">
             {/* Mobile Logo */}
             <div className="lg:hidden flex items-center gap-2 mb-5 sm:mb-6 justify-center">
-              <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-lg bg-gradient-to-br from-primary to-secondary flex items-center justify-center shadow-lg">
-                <GraduationCap className="w-5 h-5 text-primary-foreground" />
+              <div className="relative w-10 h-10 sm:w-11 sm:h-11 flex-shrink-0">
+                <Image src="/images/logo.png" alt="ePencil Academy" fill className="object-contain" priority />
               </div>
-              <h1 className="text-lg sm:text-xl font-bold text-foreground">SmartLearn</h1>
+              <h1 className="text-lg sm:text-xl font-bold text-foreground">ePencil Academy</h1>
             </div>
 
             <div className="mb-5 sm:mb-6">

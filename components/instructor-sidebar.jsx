@@ -53,7 +53,7 @@ export function InstructorSidebar() {
     { href: "/instructor/students", label: "Students", icon: Users, gradient: "from-accent to-secondary" },
     // { href: "/instructor/analytics", label: "Analytics", icon: BarChart3, gradient: "from-primary to-accent" },
     // { href: "/instructor/messages", label: "Messages", icon: MessageSquare, gradient: "from-secondary to-primary" },
-    
+
     {
       href: "/instructor/profile",
       label: "Profile Settings",
@@ -84,15 +84,15 @@ export function InstructorSidebar() {
     queryKey: ["pendingEnrollments", session?.user?.id],
     queryFn: async () => {
       if (!session?.user?.id) return { enrollments: [] }
-      
+
       const res = await fetch("/api/instructor/enrollments/pending", {
         cache: "no-store",
       })
-      
+
       if (!res.ok) {
         throw new Error("Failed to fetch enrollments")
       }
-      
+
       const data = await res.json()
       return data
     },
@@ -107,15 +107,15 @@ export function InstructorSidebar() {
     queryKey: ["instructorDeliveries", session?.user?.id],
     queryFn: async () => {
       if (!session?.user?.id) return { deliveries: [], counts: {} }
-      
+
       const res = await fetch("/api/instructor/deliveries", {
         cache: "no-store",
       })
-      
+
       if (!res.ok) {
         throw new Error("Failed to fetch deliveries")
       }
-      
+
       const data = await res.json()
       return data
     },
@@ -148,14 +148,14 @@ export function InstructorSidebar() {
   // Reset viewed status when count goes from 0 to > 0 (new items appeared)
   useEffect(() => {
     if (typeof window === "undefined") return
-    
+
     // If enrollment count increased from 0, reset viewed status
     if (prevEnrollmentCountRef.current === 0 && enrollmentCount > 0 && hasViewedEnrollments) {
       localStorage.removeItem("instructor-enrollments-viewed")
       setHasViewedEnrollments(false)
     }
     prevEnrollmentCountRef.current = enrollmentCount
-    
+
     // If delivery count increased from 0, reset viewed status
     if (prevDeliveryCountRef.current === 0 && deliveryCount > 0 && hasViewedDeliveries) {
       localStorage.removeItem("instructor-deliveries-viewed")
@@ -260,7 +260,7 @@ export function InstructorSidebar() {
             </div>
             <div>
               <h2 className="font-bold text-lg bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-                SmartLearn
+                ePencil Academy
               </h2>
               <p className="text-xs text-muted-foreground font-medium">Instructor Portal</p>
             </div>
@@ -289,9 +289,8 @@ export function InstructorSidebar() {
                     key={item.href}
                     href={item.href}
                     onClick={() => setMobileMenuOpen(false)}
-                    className={`w-full group relative flex items-center gap-3 px-4 py-3.5 rounded-xl transition-all duration-200 ${
-                      active ? "bg-muted shadow-md" : "hover:bg-muted/50"
-                    }`}
+                    className={`w-full group relative flex items-center gap-3 px-4 py-3.5 rounded-xl transition-all duration-200 ${active ? "bg-muted shadow-md" : "hover:bg-muted/50"
+                      }`}
                   >
                     {active && (
                       <div
@@ -301,9 +300,8 @@ export function InstructorSidebar() {
 
                     <div className="relative">
                       <div
-                        className={`w-10 h-10 rounded-lg flex items-center justify-center transition-all duration-200 ${
-                          active ? `bg-gradient-to-br ${item.gradient} shadow-lg` : "bg-muted group-hover:bg-accent/20"
-                        }`}
+                        className={`w-10 h-10 rounded-lg flex items-center justify-center transition-all duration-200 ${active ? `bg-gradient-to-br ${item.gradient} shadow-lg` : "bg-muted group-hover:bg-accent/20"
+                          }`}
                       >
                         <Icon className={`w-5 h-5 ${active ? "text-primary-foreground" : "text-foreground"}`} />
                       </div>
@@ -320,9 +318,8 @@ export function InstructorSidebar() {
                     </div>
 
                     <span
-                      className={`font-semibold text-sm ${
-                        active ? `bg-gradient-to-r ${item.gradient} bg-clip-text text-transparent` : "text-foreground"
-                      }`}
+                      className={`font-semibold text-sm ${active ? `bg-gradient-to-r ${item.gradient} bg-clip-text text-transparent` : "text-foreground"
+                        }`}
                     >
                       {item.label}
                     </span>
@@ -360,9 +357,8 @@ export function InstructorSidebar() {
 
       {/* Desktop Sidebar */}
       <aside
-        className={`hidden lg:block fixed left-0 top-0 ${
-          sidebarOpen ? "w-72" : "w-20"
-        } bg-card border-r border-border h-screen transition-all duration-300 shadow-lg z-40`}
+        className={`hidden lg:block fixed left-0 top-0 ${sidebarOpen ? "w-72" : "w-20"
+          } bg-card border-r border-border h-screen transition-all duration-300 shadow-lg z-40`}
       >
         <div className="flex flex-col h-full">
           {/* Header Section */}
@@ -375,13 +371,13 @@ export function InstructorSidebar() {
                 {sidebarOpen && (
                   <div>
                     <h2 className="font-bold text-xl bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-                      SmartLearn
+                      ePencil Academy
                     </h2>
                     <p className="text-xs text-muted-foreground font-medium">Instructor Portal</p>
                   </div>
                 )}
               </div>
-              
+
               {/* Toggle Button */}
               {sidebarOpen && (
                 <button
@@ -393,12 +389,12 @@ export function InstructorSidebar() {
                 </button>
               )}
             </div>
-            
+
             {/* Theme Toggle */}
             <div className={`${sidebarOpen ? 'w-full' : 'flex justify-center'}`}>
               <ThemeToggle />
             </div>
-            
+
             {/* Expand button when collapsed */}
             {!sidebarOpen && (
               <button
@@ -421,9 +417,8 @@ export function InstructorSidebar() {
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`w-full group relative flex items-center ${sidebarOpen ? "gap-3 px-4" : "justify-center px-2"} py-3.5 rounded-xl transition-all duration-200 active:scale-[0.98] ${
-                    active ? "bg-muted shadow-md" : "hover:bg-muted/50"
-                  }`}
+                  className={`w-full group relative flex items-center ${sidebarOpen ? "gap-3 px-4" : "justify-center px-2"} py-3.5 rounded-xl transition-all duration-200 active:scale-[0.98] ${active ? "bg-muted shadow-md" : "hover:bg-muted/50"
+                    }`}
                   title={!sidebarOpen ? item.label : ""}
                   aria-label={item.label}
                 >
@@ -435,9 +430,8 @@ export function InstructorSidebar() {
 
                   <div className="relative">
                     <div
-                      className={`w-10 h-10 rounded-lg flex items-center justify-center transition-all duration-200 ${
-                        active ? `bg-gradient-to-br ${item.gradient} shadow-lg` : "bg-muted group-hover:bg-accent/20"
-                      }`}
+                      className={`w-10 h-10 rounded-lg flex items-center justify-center transition-all duration-200 ${active ? `bg-gradient-to-br ${item.gradient} shadow-lg` : "bg-muted group-hover:bg-accent/20"
+                        }`}
                     >
                       <Icon className={`w-5 h-5 ${active ? "text-primary-foreground" : "text-foreground"}`} />
                     </div>
@@ -456,9 +450,8 @@ export function InstructorSidebar() {
                   {sidebarOpen && (
                     <div className="flex items-center gap-2">
                       <span
-                        className={`font-semibold text-sm ${
-                          active ? `bg-gradient-to-r ${item.gradient} bg-clip-text text-transparent` : "text-foreground"
-                        }`}
+                        className={`font-semibold text-sm ${active ? `bg-gradient-to-r ${item.gradient} bg-clip-text text-transparent` : "text-foreground"
+                          }`}
                       >
                         {item.label}
                       </span>
@@ -503,9 +496,8 @@ export function InstructorSidebar() {
 
             <button
               onClick={() => signOut({ callbackUrl: "/" })}
-              className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-semibold text-sm transition-all duration-200 bg-destructive/10 text-destructive hover:bg-destructive/20 border border-destructive/20 hover:shadow-md ${
-                !sidebarOpen && "flex-col gap-1 py-2"
-              }`}
+              className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-semibold text-sm transition-all duration-200 bg-destructive/10 text-destructive hover:bg-destructive/20 border border-destructive/20 hover:shadow-md ${!sidebarOpen && "flex-col gap-1 py-2"
+                }`}
             >
               <LogOut className={`${sidebarOpen ? "w-5 h-5" : "w-6 h-6"}`} />
               {sidebarOpen && <span>Logout</span>}

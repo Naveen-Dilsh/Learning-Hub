@@ -29,9 +29,8 @@ const shrikhand = Shrikhand({
 
 
 export const metadata = {
-  title: "SmartLearn LMS - Modern Learning Platform",
+  title: "ePencil Academy ",
   description: "Secure Video Learning Platform with Interactive Courses",
-  generator: "v0.app",
 }
 
 export const viewport = {

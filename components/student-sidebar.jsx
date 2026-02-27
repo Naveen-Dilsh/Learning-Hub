@@ -53,7 +53,7 @@ export function StudentSidebar() {
 
   // Memoize active check
   const isActive = useCallback((href) => pathname === href, [pathname])
-  
+
   // Memoize handlers
   const toggleMobileMenu = useCallback(() => setMobileMenuOpen(prev => !prev), [])
   const closeMobileMenu = useCallback(() => setMobileMenuOpen(false), [])
@@ -67,15 +67,15 @@ export function StudentSidebar() {
     queryKey: ["deliveries", session?.user?.id],
     queryFn: async () => {
       if (!session?.user?.id) return []
-      
+
       const res = await fetch("/api/student/deliveries", {
         cache: "no-store",
       })
-      
+
       if (!res.ok) {
         throw new Error("Failed to fetch deliveries")
       }
-      
+
       const data = await res.json()
       return Array.isArray(data) ? data : []
     },
@@ -90,15 +90,15 @@ export function StudentSidebar() {
     queryKey: ["liveSessions", session?.user?.id],
     queryFn: async () => {
       if (!session?.user?.id) return { liveSessions: [] }
-      
+
       const res = await fetch("/api/student/live-sessions", {
         cache: "no-store",
       })
-      
+
       if (!res.ok) {
         throw new Error("Failed to fetch live sessions")
       }
-      
+
       return await res.json()
     },
     enabled: !!session?.user?.id && session?.user?.role === "STUDENT",
@@ -213,14 +213,14 @@ export function StudentSidebar() {
   // Reset viewed status when count goes from 0 to > 0 (new items appeared)
   useEffect(() => {
     if (typeof window === "undefined") return
-    
+
     // If delivery count increased from 0, reset viewed status
     if (prevDeliveryCountRef.current === 0 && deliveryCount > 0 && hasViewedDeliveries) {
       localStorage.removeItem("deliveries-viewed")
       setHasViewedDeliveries(false)
     }
     prevDeliveryCountRef.current = deliveryCount
-    
+
     // If live session count increased from 0, reset viewed status
     if (prevLiveSessionCountRef.current === 0 && liveSessionCount > 0 && hasViewedLiveSessions) {
       localStorage.removeItem("live-sessions-viewed")
@@ -254,7 +254,7 @@ export function StudentSidebar() {
             </div>
             <div>
               <h2 className="font-bold text-base sm:text-lg bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-                SmartLearn
+                ePencil Academy
               </h2>
               <p className="text-[10px] sm:text-xs text-muted-foreground font-medium">Student Portal</p>
             </div>
@@ -284,9 +284,8 @@ export function StudentSidebar() {
                     key={item.href}
                     href={item.href}
                     onClick={closeMobileMenu}
-                    className={`w-full group relative flex items-center gap-3 px-4 py-3.5 rounded-xl transition-all duration-200 active:scale-[0.98] ${
-                      active ? "bg-muted shadow-md" : "hover:bg-muted/50"
-                    }`}
+                    className={`w-full group relative flex items-center gap-3 px-4 py-3.5 rounded-xl transition-all duration-200 active:scale-[0.98] ${active ? "bg-muted shadow-md" : "hover:bg-muted/50"
+                      }`}
                   >
                     {active && (
                       <div
@@ -296,9 +295,8 @@ export function StudentSidebar() {
 
                     <div className="relative">
                       <div
-                        className={`w-10 h-10 rounded-lg flex items-center justify-center transition-all duration-200 ${
-                          active ? `bg-gradient-to-br ${item.gradient} shadow-lg` : "bg-muted group-hover:bg-accent/20"
-                        }`}
+                        className={`w-10 h-10 rounded-lg flex items-center justify-center transition-all duration-200 ${active ? `bg-gradient-to-br ${item.gradient} shadow-lg` : "bg-muted group-hover:bg-accent/20"
+                          }`}
                       >
                         <Icon className={`w-5 h-5 ${active ? "text-primary-foreground" : "text-foreground"}`} />
                       </div>
@@ -315,9 +313,8 @@ export function StudentSidebar() {
                     </div>
 
                     <span
-                      className={`font-semibold text-sm ${
-                        active ? `bg-gradient-to-r ${item.gradient} bg-clip-text text-transparent` : "text-foreground"
-                      }`}
+                      className={`font-semibold text-sm ${active ? `bg-gradient-to-r ${item.gradient} bg-clip-text text-transparent` : "text-foreground"
+                        }`}
                     >
                       {item.label}
                     </span>
@@ -355,9 +352,8 @@ export function StudentSidebar() {
 
       {/* Desktop Sidebar */}
       <aside
-        className={`hidden lg:block ${
-          sidebarOpen ? "w-72" : "w-20"
-        } min-w-[5rem] max-w-[18rem] bg-card border-r border-border min-h-screen sticky top-0 transition-all duration-300 shadow-lg flex-shrink-0`}
+        className={`hidden lg:block ${sidebarOpen ? "w-72" : "w-20"
+          } min-w-[5rem] max-w-[18rem] bg-card border-r border-border min-h-screen sticky top-0 transition-all duration-300 shadow-lg flex-shrink-0`}
       >
         <div className="flex flex-col h-screen">
           {/* Header Section */}
@@ -370,13 +366,13 @@ export function StudentSidebar() {
                 {sidebarOpen && (
                   <div>
                     <h2 className="font-bold text-xl bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-                      SmartLearn
+                      ePencil Academy
                     </h2>
                     <p className="text-xs text-muted-foreground font-medium">Student Portal</p>
                   </div>
                 )}
               </div>
-              
+
               {/* Toggle Button */}
               {sidebarOpen && (
                 <button
@@ -388,12 +384,12 @@ export function StudentSidebar() {
                 </button>
               )}
             </div>
-            
+
             {/* Theme Toggle */}
             <div className={`${sidebarOpen ? 'w-full' : 'flex justify-center'}`}>
               <ThemeToggle />
             </div>
-            
+
             {/* Expand button when collapsed */}
             {!sidebarOpen && (
               <button
@@ -416,9 +412,8 @@ export function StudentSidebar() {
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`w-full group relative flex items-center ${sidebarOpen ? "gap-3 px-4" : "justify-center px-2"} py-3.5 rounded-xl transition-all duration-200 active:scale-[0.98] ${
-                    active ? "bg-muted shadow-md" : "hover:bg-muted/50"
-                  }`}
+                  className={`w-full group relative flex items-center ${sidebarOpen ? "gap-3 px-4" : "justify-center px-2"} py-3.5 rounded-xl transition-all duration-200 active:scale-[0.98] ${active ? "bg-muted shadow-md" : "hover:bg-muted/50"
+                    }`}
                   title={!sidebarOpen ? item.label : ""}
                   aria-label={item.label}
                 >
@@ -431,9 +426,8 @@ export function StudentSidebar() {
                   <div className="relative">
                     <div className="relative">
                       <div
-                        className={`w-10 h-10 rounded-lg flex items-center justify-center transition-all duration-200 ${
-                          active ? `bg-gradient-to-br ${item.gradient} shadow-lg` : "bg-muted group-hover:bg-accent/20"
-                        }`}
+                        className={`w-10 h-10 rounded-lg flex items-center justify-center transition-all duration-200 ${active ? `bg-gradient-to-br ${item.gradient} shadow-lg` : "bg-muted group-hover:bg-accent/20"
+                          }`}
                       >
                         <Icon className={`w-5 h-5 ${active ? "text-primary-foreground" : "text-foreground"}`} />
                       </div>
@@ -453,9 +447,8 @@ export function StudentSidebar() {
                   {sidebarOpen && (
                     <div className="flex-1 flex items-center justify-between min-w-0">
                       <span
-                        className={`font-semibold text-sm ${
-                          active ? `bg-gradient-to-r ${item.gradient} bg-clip-text text-transparent` : "text-foreground"
-                        }`}
+                        className={`font-semibold text-sm ${active ? `bg-gradient-to-r ${item.gradient} bg-clip-text text-transparent` : "text-foreground"
+                          }`}
                       >
                         {item.label}
                       </span>
@@ -498,9 +491,8 @@ export function StudentSidebar() {
 
             <button
               onClick={handleLogout}
-              className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-semibold text-sm transition-all duration-200 bg-destructive/10 text-destructive hover:bg-destructive/20 border border-destructive/20 hover:shadow-md active:scale-[0.98] ${
-                !sidebarOpen && "flex-col gap-1 py-2"
-              }`}
+              className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-semibold text-sm transition-all duration-200 bg-destructive/10 text-destructive hover:bg-destructive/20 border border-destructive/20 hover:shadow-md active:scale-[0.98] ${!sidebarOpen && "flex-col gap-1 py-2"
+                }`}
               aria-label="Logout"
             >
               <LogOut className={`${sidebarOpen ? "w-5 h-5" : "w-6 h-6"}`} />

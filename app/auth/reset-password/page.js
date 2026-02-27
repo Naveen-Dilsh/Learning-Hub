@@ -2,9 +2,10 @@
 
 import { useState, useCallback, useEffect, Suspense } from "react"
 import { useToast } from "@/hooks/use-toast"
-import { Lock, ArrowRight, Eye, EyeOff, GraduationCap, CheckCircle, AlertCircle } from "lucide-react"
+import { Lock, ArrowRight, Eye, EyeOff, CheckCircle, AlertCircle } from "lucide-react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
+import Image from "next/image"
 
 function ResetPasswordForm() {
     const router = useRouter()
@@ -77,10 +78,10 @@ function ResetPasswordForm() {
             <div className="w-full max-w-md mx-auto">
                 {/* Logo */}
                 <div className="flex items-center gap-2 mb-8 justify-center">
-                    <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center shadow-lg">
-                        <GraduationCap className="w-6 h-6 text-primary-foreground" />
+                    <div className="relative w-11 h-11 flex-shrink-0">
+                        <Image src="/images/logo.png" alt="ePencil Academy" fill className="object-contain" priority />
                     </div>
-                    <h1 className="text-xl font-bold text-foreground">SmartLearn</h1>
+                    <h1 className="text-xl font-bold text-foreground">ePencil Academy</h1>
                 </div>
 
                 <div className="bg-card rounded-xl shadow-sm border border-border p-6 sm:p-8">
@@ -177,8 +178,8 @@ function ResetPasswordForm() {
                                             onChange={(e) => setConfirmPassword(e.target.value)}
                                             required
                                             className={`w-full pl-10 pr-10 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-ring bg-background text-foreground text-sm transition-all ${!passwordsMatch && confirmPassword
-                                                    ? "border-destructive focus:ring-destructive/30"
-                                                    : "border-input"
+                                                ? "border-destructive focus:ring-destructive/30"
+                                                : "border-input"
                                                 }`}
                                             placeholder="Repeat your password"
                                         />
