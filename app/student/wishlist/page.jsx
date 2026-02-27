@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import Image from "next/image"
 import { useSession } from "next-auth/react"
 import { useEffect, useState } from "react"
 import { Heart } from "lucide-react"
@@ -67,11 +68,13 @@ export default function Wishlist() {
               key={item.id}
               className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition"
             >
-              <div className="relative">
-                <img
+              <div className="relative w-full h-40">
+                <Image
                   src={item.course?.thumbnail || "/placeholder.svg"}
-                  alt={item.course?.title}
-                  className="w-full h-40 object-cover"
+                  alt={item.course?.title || "Course thumbnail"}
+                  fill
+                  className="object-cover"
+                  sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw"
                 />
                 <button className="absolute top-2 right-2 p-2 bg-white rounded-lg shadow hover:shadow-md transition">
                   <Heart className="w-5 h-5 text-red-600 fill-red-600" />

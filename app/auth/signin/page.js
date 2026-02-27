@@ -3,9 +3,9 @@
 import { useState, useCallback, useMemo } from "react"
 import { useToast } from "@/hooks/use-toast"
 import { Mail, Lock, ArrowRight, Eye, EyeOff, GraduationCap } from "lucide-react"
+import Link from "next/link"
 import { signIn, useSession } from "next-auth/react"
 import { useRouter, useSearchParams } from "next/navigation"
-import Link from "next/link"
 import Image from "next/image"
 
 export default function SignIn() {
@@ -50,7 +50,7 @@ export default function SignIn() {
             title: "Welcome Back",
             description: "You have been signed in successfully.",
           })
-          
+
           // Fetch session to get user role for redirect
           const sessionResponse = await fetch("/api/auth/session")
           const session = await sessionResponse.json()
@@ -144,12 +144,13 @@ export default function SignIn() {
 
             <form onSubmit={handleSubmit} className="space-y-3 sm:space-y-4">
               <div>
-                <label className="block text-xs sm:text-sm font-medium text-foreground mb-1.5 sm:mb-2">
+                <label htmlFor="email" className="block text-xs sm:text-sm font-medium text-foreground mb-1.5 sm:mb-2">
                   Email Address
                 </label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
                   <input
+                    id="email"
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
@@ -162,17 +163,18 @@ export default function SignIn() {
 
               <div>
                 <div className="flex items-center justify-between mb-1.5 sm:mb-2">
-                  <label className="block text-xs sm:text-sm font-medium text-foreground">Password</label>
-                  <button
-                    type="button"
+                  <label htmlFor="password" className="block text-xs sm:text-sm font-medium text-foreground">Password</label>
+                  <Link
+                    href="/auth/forgot-password"
                     className="text-xs font-semibold text-primary hover:text-primary/80 transition-colors"
                   >
                     Forgot?
-                  </button>
+                  </Link>
                 </div>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
                   <input
+                    id="password"
                     type={showPassword ? "text" : "password"}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}

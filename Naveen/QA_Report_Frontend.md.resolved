@@ -1,0 +1,392 @@
+# 🔍 Frontend QA Report — SmartLearn LMS (Learning-Hub)
+
+**Project:** SmartLearn LMS  
+**Stack:** Next.js 15 · React 19 · TailwindCSS v4 · Radix UI · TanStack Query · NextAuth · Prisma  
+**Report Date:** 2026-02-26  
+**Reviewer:** Antigravity AI  
+
+---
+
+## Executive Summary
+
+The frontend is a well-structured Next.js 15 application with a solid design system, role-based routing, dark-mode support, and performance optimizations already in place (lazy loading, memoization, `next/font`, image optimization). However, several issues across **code quality, security, accessibility, and maintainability** require attention before a production release.
+
+| Severity | Count |
+|---|---|
+| 🔴 Critical | 3 |
+| 🟠 High | 5 |
+| 🟡 Medium | 7 |
+| 🟢 Low / Enhancement | 6 |
+| **Total** | **21** |
+
+---
+
+## 1. Code Quality & Build Configuration
+
+### 🔴 CRITICAL — ESLint and TypeScript Errors Silenced in Builds
+**File:** [next.config.mjs](file:///Users/naveen/Manusha/Learning-Hub/next.config.mjs) (lines 3–8)
+
+```js
+eslint: { ignoreDuringBuilds: true },
+typescript: { ignoreBuildErrors: true },
+```
+
+This suppresses all linting and type errors during `next build`. Real bugs (type mismatches, unused variables, dead code) can silently ship to production.
+
+**Fix:** Remove both flags. Address all ESLint and TypeScript errors, then re-enable enforcement.
+
+---
+
+### 🟠 HIGH — Production `console.log` Statements
+**Files affected:** [video-player.js](file:///Users/naveen/Manusha/Learning-Hub/components/video-player.js), [app/instructor/courses/create/page.js](file:///Users/naveen/Manusha/Learning-Hub/app/instructor/courses/create/page.js), `app/student/browse-course/[id]/enroll-manual/page.jsx`, and many API routes.
+
+Debug logs with messages like `[v0] Fetching video token`, `[v0] 🎉 Video completed!`, progress percentages etc. are left in production code. These:
+- Expose internal logic and API paths to browser DevTools
+- Create noise in server logs
+- May expose user data (user ID, video ID, course ID)
+
+**Fix:** Replace with a conditional logger (`if (process.env.NODE_ENV === 'development')`) or use a logging library. Remove all `[v0]`-prefixed debug logs.
+
+---
+
+### 🟠 HIGH — Massive Duplicate Code in Sidebars
+**Files:** [student-sidebar.jsx](file:///Users/naveen/Manusha/Learning-Hub/components/student-sidebar.jsx) (518 lines) and [instructor-sidebar.jsx](file:///Users/naveen/Manusha/Learning-Hub/components/instructor-sidebar.jsx) (522 lines)
+
+Both sidebars share ~85% identical JSX: mobile menu bar, desktop collapsible sidebar, user section, logout button, badge logic, and localStorage polling. The logic is copy-pasted and diverges in minor ways (role checks, menu items), making bugs harder to fix and features harder to add.
+
+**Fix:** Extract a shared `<AppSidebar menuItems={...} badgeConfig={...} portalLabel={...} />` component, reducing each file to ~80 lines of configuration.
+
+---
+
+### 🟡 MEDIUM — `allMenuItems` Array Recreated on Every Render
+**File:** [instructor-sidebar.jsx](file:///Users/naveen/Manusha/Learning-Hub/components/instructor-sidebar.jsx) (lines 36–63)
+
+`allMenuItems` is declared as a plain array inside the component body, so it is recreated on every render.  The `menuItems` `useMemo` filters it, but `allMenuItems` itself is not memoized.
+
+**Fix:** Move `allMenuItems` outside the component or wrap it in `useMemo`.
+
+---
+
+### 🟡 MEDIUM — [isActive](file:///Users/naveen/Manusha/Learning-Hub/components/instructor-sidebar.jsx#80-81) Not Memoized in Instructor Sidebar
+**File:** [instructor-sidebar.jsx](file:///Users/naveen/Manusha/Learning-Hub/components/instructor-sidebar.jsx) (line 80)
+
+```js
+const isActive = (href) => pathname === href
+```
+
+Unlike [student-sidebar.jsx](file:///Users/naveen/Manusha/Learning-Hub/components/student-sidebar.jsx) which uses `useCallback`, the instructor sidebar recreates this function every render.
+
+**Fix:** Wrap with `useCallback(() => ..., [pathname])`.
+
+---
+
+### 🟡 MEDIUM — [fetch](file:///Users/naveen/Manusha/Learning-Hub/components/video-player.js#125-166) Error in [video-player.js](file:///Users/naveen/Manusha/Learning-Hub/components/video-player.js) Dependency Array Bug
+**File:** [video-player.js](file:///Users/naveen/Manusha/Learning-Hub/components/video-player.js) (line 174)
+
+```js
+}, [videoId, courseId, error])
+```
+
+The `error` state is included in the deps of the token-fetch effect. If token fetching fails and sets `error`, the effect re-runs, potentially triggering an infinite fetch loop.
+
+**Fix:** Remove `error` from the dependency array. Use a `hasFetched` ref to guard the effect.
+
+---
+
+### 🟡 MEDIUM — `localStorage` Polling Every 500ms
+**Files:** [student-sidebar.jsx](file:///Users/naveen/Manusha/Learning-Hub/components/student-sidebar.jsx) (lines 165, 201), [instructor-sidebar.jsx](file:///Users/naveen/Manusha/Learning-Hub/components/instructor-sidebar.jsx) (lines 195, 231)
+
+A `setInterval(checkViewed, 500)` is running continuously per sidebar mount to work around the fact that `storage` events don't fire within the same tab. This is inefficient.
+
+**Fix:** Use a Zustand store (already in the project) or React Context to share the `viewed` flag in-process, eliminating the polling entirely.
+
+---
+
+### 🟢 LOW — Commented-Out Menu Items
+**Files:** [student-sidebar.jsx](file:///Users/naveen/Manusha/Learning-Hub/components/student-sidebar.jsx) (lines 48–49), [instructor-sidebar.jsx](file:///Users/naveen/Manusha/Learning-Hub/components/instructor-sidebar.jsx) (lines 52–55)
+
+Wishlist, Notifications, Earnings, Analytics, and Messages are commented out. This indicates unfinished features left in code.
+
+**Fix:** Move to a feature-flag pattern or a separate `upcomingMenuItems` array with a clear label.
+
+---
+
+## 2. Security
+
+### 🔴 CRITICAL — `'unsafe-inline'` and `'unsafe-eval'` in CSP
+**File:** [next.config.mjs](file:///Users/naveen/Manusha/Learning-Hub/next.config.mjs) (lines 81–82)
+
+```
+script-src 'self' 'unsafe-eval' 'unsafe-inline' https://embed.cloudflarestream.com
+style-src  'self' 'unsafe-inline'
+```
+
+`unsafe-eval` enables `eval()` and the Function constructor — a common XSS exploitation path. `unsafe-inline` allows inline scripts and styles, weakening CSP protection. React itself does not need `unsafe-eval` in production builds.
+
+**Fix:** Use nonce-based CSP (`'nonce-xxx'`) with Next.js middleware for inline scripts, and remove `unsafe-eval`. Tailwind v4 also supports hashed inline styles.
+
+---
+
+### 🔴 CRITICAL — "Forgot Password" Button Has No Implementation
+**File:** [app/auth/signin/page.js](file:///Users/naveen/Manusha/Learning-Hub/app/auth/signin/page.js) (lines 166–171)
+
+```jsx
+<button type="button" className="...">
+  Forgot?
+</button>
+```
+
+The button is present and clickable but does nothing — no `onClick` handler, no route, no API. Users who forget their password are silently stuck.
+
+**Fix:** Implement a password reset flow (email + token) or remove the button and add it back when the feature is ready.
+
+---
+
+### 🟠 HIGH — Open Redirect Risk on Sign-In `callbackUrl`
+**File:** [app/auth/signin/page.js](file:///Users/naveen/Manusha/Learning-Hub/app/auth/signin/page.js) (line 20)
+
+```js
+const callbackUrl = useMemo(() => searchParams.get("callbackUrl") || "/student", [searchParams])
+```
+
+`callbackUrl` is read directly from URL params without validation. An attacker can craft `?callbackUrl=https://evil.com` and redirect a user there after login.
+
+**Fix:**
+```js
+const rawUrl = searchParams.get("callbackUrl") || "/student"
+const callbackUrl = rawUrl.startsWith("/") ? rawUrl : "/student"
+```
+
+---
+
+### 🟡 MEDIUM — `dangerouslyAllowSVG: true` Without Restricted CSP
+**File:** [next.config.mjs](file:///Users/naveen/Manusha/Learning-Hub/next.config.mjs) (line 16)
+
+SVG files can contain embedded JavaScript. The `contentSecurityPolicy` for SVGs is set to `sandbox` which is correct, but given the relaxed global CSP (`unsafe-inline`) this protection layer is weakened.
+
+**Fix:** Keep `dangerouslyAllowSVG: true` only if user-uploaded SVGs are served; otherwise remove it.
+
+---
+
+## 3. Accessibility (a11y)
+
+### 🟠 HIGH — Raw `<img>` Tags Used Instead of `next/image`
+**File:** [app/student/page.jsx](file:///Users/naveen/Manusha/Learning-Hub/app/student/page.jsx) (lines 153–157)
+
+```jsx
+<img
+  src={enrollment.course.thumbnail || "/placeholder.svg"}
+  alt={enrollment.course.title}
+  className="w-full h-32 sm:h-40 object-cover"
+/>
+```
+
+Raw `<img>` tags bypass Next.js image optimization (lazy loading, WebP conversion, size hints). The same pattern exists in [app/dashboard/page.js](file:///Users/naveen/Manusha/Learning-Hub/app/dashboard/page.js), [wishlist/page.jsx](file:///Users/naveen/Manusha/Learning-Hub/app/student/wishlist/page.jsx), and [instructor/enrollments/pending/page.jsx](file:///Users/naveen/Manusha/Learning-Hub/app/instructor/enrollments/pending/page.jsx).
+
+**Fix:** Replace with `<Image src={...} alt={...} fill className="object-cover" />` using Next.js [Image](file:///Users/naveen/Manusha/Learning-Hub/components/Home/HeroSection.jsx#71-172) component wrapped in a `relative` container.
+
+---
+
+### 🟠 HIGH — Mobile Menu Toggle Button Has No `aria-label` on Instructor Sidebar
+**File:** [instructor-sidebar.jsx](file:///Users/naveen/Manusha/Learning-Hub/components/instructor-sidebar.jsx) (lines 271–275)
+
+```jsx
+<button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="...">
+  {mobileMenuOpen ? <X /> : <Menu />}
+</button>
+```
+
+The button has no `aria-label`. Screen readers will announce it as an unlabeled button.
+
+**Fix:** Add `aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}` and `aria-expanded={mobileMenuOpen}`.
+
+---
+
+### 🟡 MEDIUM — `<label>` Elements Not Linked to Inputs
+**File:** [app/auth/signin/page.js](file:///Users/naveen/Manusha/Learning-Hub/app/auth/signin/page.js) (lines 147, 165)
+
+```jsx
+<label className="...">Email Address</label>
+<input type="email" ... />
+```
+
+The `<label>` has no `htmlFor` attribute, and the `<input>` has no [id](file:///Users/naveen/Manusha/Learning-Hub/components/providers.js#9-35). They are not programmatically associated.
+
+**Fix:** Add `htmlFor="email"` to the label and `id="email"` to the input. Same fix needed for the password field.
+
+---
+
+### 🟡 MEDIUM — Aria Label Mismatch in HeroSection Stats
+**File:** [components/Home/HeroSection.jsx](file:///Users/naveen/Manusha/Learning-Hub/components/Home/HeroSection.jsx) (line 314)
+
+The `aria-label="50,000 plus students"` says "50,000" but the visible text reads "10K+". Screen reader users get different information than sighted users.
+
+**Fix:** Align `aria-label` with actual displayed value: `aria-label="10,000 plus students"`.
+
+---
+
+### 🟡 MEDIUM — Video Player Has No Accessible Controls or Skip Option
+**File:** [components/video-player.js](file:///Users/naveen/Manusha/Learning-Hub/components/video-player.js)
+
+The video player is implemented as a raw `<iframe>` injection with no surrounding accessible wrapper (`role="region"`, `aria-label="Video player"`). Keyboard-only and screen-reader users cannot navigate to or around the player easily.
+
+**Fix:** Add `role="region"` and `aria-label="Course video player"` to the outer container div.
+
+---
+
+## 4. Performance
+
+### 🟡 MEDIUM — `style jsx` Inline CSS in HeroSection
+**File:** [components/Home/HeroSection.jsx](file:///Users/naveen/Manusha/Learning-Hub/components/Home/HeroSection.jsx) (lines 371–381)
+
+```jsx
+<style jsx>{`
+  @keyframes float { ... }
+`}</style>
+```
+
+`styled-jsx` is a Next.js Pages Router feature, not App Router. In the App Router context this may work but adds an unnecessary runtime dependency and injects a non-cacheable `<style>` tag on every render.
+
+**Fix:** Move the `@keyframes float` animation to [globals.css](file:///Users/naveen/Manusha/Learning-Hub/app/globals.css).
+
+---
+
+### 🟢 LOW — Redundant CSS: Both `@layer base` and Regular Rules Apply Same Styles
+**File:** [app/globals.css](file:///Users/naveen/Manusha/Learning-Hub/app/globals.css) (lines 261–278)
+
+```css
+@layer base { body { @apply bg-background text-foreground; } }
+/* Then immediately after: */
+body { background-color: var(--background); color: var(--foreground); }
+```
+
+The same styles are defined twice — once inside `@layer base` and once as a regular rule.
+
+**Fix:** Remove the duplicate regular rules at lines 274–279 and keep only the `@layer base` version.
+
+---
+
+### 🟢 LOW — Inline `style` Attribute for Background Gradient Duplication in HeroSection
+**File:** [components/Home/HeroSection.jsx](file:///Users/naveen/Manusha/Learning-Hub/components/Home/HeroSection.jsx) (lines 194–197)
+
+Both a Tailwind `bg-gradient-to-br` class and an inline `style={{ background: ... }}` are applied to the same `<section>`. The inline style wins and the Tailwind class is redundant.
+
+**Fix:** Remove the Tailwind gradient class and keep only the inline style (or vice versa — define a CSS variable-based Tailwind utility).
+
+---
+
+## 5. UX Issues
+
+### 🟠 HIGH — Error State Silently Falls Through on Student Dashboard
+**File:** [app/student/page.jsx](file:///Users/naveen/Manusha/Learning-Hub/app/student/page.jsx) (lines 53–56)
+
+```jsx
+if (isError) {
+  console.error("Error fetching enrollments:", error)
+  // Still render the page with empty data, but could show error message
+}
+```
+
+When the API fails, the user sees an empty dashboard with no feedback (no toast, no error banner). The developer comment even acknowledges this is incomplete.
+
+**Fix:** Show a user-visible error state — a toast notification or an inline alert card: *"We couldn't load your courses. Please refresh."*
+
+---
+
+### 🟡 MEDIUM — `placeholder.svg` Used as Fallback but File May Not Exist
+**Files:** [app/student/page.jsx](file:///Users/naveen/Manusha/Learning-Hub/app/student/page.jsx), [app/dashboard/page.js](file:///Users/naveen/Manusha/Learning-Hub/app/dashboard/page.js), [app/student/wishlist/page.jsx](file:///Users/naveen/Manusha/Learning-Hub/app/student/wishlist/page.jsx), [app/instructor/enrollments/pending/page.jsx](file:///Users/naveen/Manusha/Learning-Hub/app/instructor/enrollments/pending/page.jsx), [components/image-upload.jsx](file:///Users/naveen/Manusha/Learning-Hub/components/image-upload.jsx)
+
+`"/placeholder.svg"` is referenced as a fallback but there is no `placeholder.svg` in the `public/` directory (only `public/images/` subdirectory was found).
+
+**Fix:** Either create `public/placeholder.svg` or replace with a Tailwind-based skeleton/gradient placeholder div.
+
+---
+
+### 🟡 MEDIUM — Student Dashboard Shows Only 3 Recent Courses (Hardcoded Slice)
+**File:** [app/student/page.jsx](file:///Users/naveen/Manusha/Learning-Hub/app/student/page.jsx) (line 44)
+
+```js
+const enrolledCourses = enrollmentData?.enrollments?.slice(0, 3) || []
+```
+
+The limit is hardcoded. If a student has 10+ courses, they see only 3 with no pagination or "show more" option (the "View All" link exists but only in proximity, not clearly tied to this limit).
+
+**Fix:** Either increase the limit or add a visible "Showing 3 of N" label so the experience is predictable.
+
+---
+
+### 🟢 LOW — "Active Learner" / "Expert Educator" Labels Are Hardcoded
+**Files:** [student-sidebar.jsx](file:///Users/naveen/Manusha/Learning-Hub/components/student-sidebar.jsx) (line 338), [instructor-sidebar.jsx](file:///Users/naveen/Manusha/Learning-Hub/components/instructor-sidebar.jsx) (line 344)
+
+All students display "Active Learner" and all instructors display "Expert Educator" regardless of their actual activity status.
+
+**Fix:** Derive this from real data (completion rate, enrollment count) or remove it entirely to avoid misleading users.
+
+---
+
+### 🟢 LOW — Watermark Uses `Math.random()` Directly in Render
+**File:** [components/video-player.js](file:///Users/naveen/Manusha/Learning-Hub/components/video-player.js) (lines 81–89)
+
+The `Math.random()` call in the watermark interval effect contains a randomized interval duration (`Math.random() * 5000 + 5000`) which is fine, but the initial interval fires immediately on mount without a random offset. This means all video players on the same session start their watermark cycle in sync.
+
+**Fix:** Vary the initial delay with a small random offset on mount.
+
+---
+
+## 6. Architecture & Patterns
+
+| Issue | File | Recommendation |
+|---|---|---|
+| Sidebar state (`sidebarOpen`) in a Zustand `useDashboard` store is good — but delivery/session "viewed" state also belongs in that store | Both sidebars | Move `hasViewedDeliveries`, `hasViewedLiveSessions`, etc. to Zustand to eliminate localStorage polling |
+| [app/dashboard/page.js](file:///Users/naveen/Manusha/Learning-Hub/app/dashboard/page.js) appears to be a duplicate of [app/student/page.jsx](file:///Users/naveen/Manusha/Learning-Hub/app/student/page.jsx) | `app/dashboard/` | Verify if this route is still used; if not, delete it |
+| Metadata `generator: "v0.app"` leaks AI tool attribution | [app/layout.js](file:///Users/naveen/Manusha/Learning-Hub/app/layout.js) line 34 | Remove or change to your own tool identifier |
+| No loading skeleton; `LoadingBubbles` replaces the entire page layout | [app/student/page.jsx](file:///Users/naveen/Manusha/Learning-Hub/app/student/page.jsx) | Use skeleton cards that match the layout for better perceived performance |
+| No test files found anywhere in the codebase | Entire project | Add unit tests (Vitest/Jest) for utility functions and Integration tests (Playwright) for auth flows |
+
+---
+
+## 7. Summary Scorecard
+
+| Category | Score | Notes |
+|---|---|---|
+| **Code Quality** | 6/10 | Good memoization patterns; duplicate sidebar code and suppressed linter hurt |
+| **Security** | 5/10 | CSP weaknesses, unimplemented "Forgot Password", open redirect risk |
+| **Accessibility** | 5/10 | Some ARIA usage; missing label associations, unlabeled buttons |
+| **Performance** | 8/10 | Strong — lazy loading, font optimization, image compression, React Query caching |
+| **UX** | 7/10 | Clean design; silent error states and broken fallback images need fixing |
+| **Architecture** | 7/10 | Good separation; sidebar duplication and localStorage polling are technical debt |
+| **Overall** | **6.3/10** | Solid foundation, needs targeted fixes before production |
+
+---
+
+## 8. Priority Action List
+
+```
+🔴 P1 (Critical — Fix Before Production)
+  1. Enable ESLint + TypeScript enforcement in next.config.mjs
+  2. Remove 'unsafe-eval' from Content-Security-Policy
+  3. Implement "Forgot Password" or remove the dead button
+  4. Validate callbackUrl to prevent open redirect
+
+🟠 P2 (High — Fix This Sprint)
+  5. Remove all production console.log statements
+  6. Replace raw <img> tags with Next.js <Image> component
+  7. Add aria-label to instructor mobile menu button
+  8. Show user-visible error state on API failure (student dashboard)
+
+🟡 P3 (Medium — Next Sprint)
+  9. Fix video-player.js fetch effect infinite loop risk
+  10. Merge sidebars into a shared component
+  11. Link form labels to inputs (htmlFor / id)
+  12. Fix aria-label / visible text mismatch in HeroSection
+  13. Create or replace /placeholder.svg fallback
+  14. Remove localStorage polling, use Zustand store
+
+🟢 P4 (Low — Backlog)
+  15. Move @keyframes float to globals.css
+  16. Remove duplicate body CSS rules
+  17. Remove generator: "v0.app" metadata field
+  18. Add loading skeletons matching page layout
+  19. Memoize allMenuItems in instructor sidebar
+  20. Add test coverage (unit + E2E)
+```

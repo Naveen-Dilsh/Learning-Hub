@@ -1,4 +1,5 @@
 /** @type {import('next').NextConfig} */
+const isDev = process.env.NODE_ENV === 'development'
 const nextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
@@ -78,7 +79,7 @@ const nextConfig = {
             key: 'Content-Security-Policy',
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://embed.cloudflarestream.com",
+              `script-src 'self' ${isDev ? "'unsafe-eval'" : ""} 'unsafe-inline' https://embed.cloudflarestream.com`,
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: https: blob: https://imagedelivery.net",
               "font-src 'self' data:",

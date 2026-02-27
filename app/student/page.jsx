@@ -3,6 +3,7 @@
 import { useSession } from "next-auth/react"
 import { useQuery } from "@tanstack/react-query"
 import Link from "next/link"
+import Image from "next/image"
 import { useEffect } from "react"
 import { BookOpen, Zap, Award } from "lucide-react"
 import { useDashboard } from "@/lib/hooks"
@@ -30,7 +31,7 @@ export default function StudentDashboard() {
       if (!session?.user?.id) {
         return { enrollments: [], stats: { totalCourses: 0, hoursWatched: 0, completedCourses: 0, certificates: 0 } }
       }
-      
+
       const res = await fetch(`/api/student/enrollments?studentId=${session.user.id}`, {
         cache: "no-store",
       })
@@ -46,7 +47,7 @@ export default function StudentDashboard() {
 
   // Show loading if query is loading OR if session is not ready yet
   if (isLoading || authStatus === "loading" || !session?.user?.id) {
-    return <LoadingBubbles/>;
+    return <LoadingBubbles />;
   }
 
   // Show error state (optional - can show error message or fallback UI)
@@ -122,8 +123,8 @@ export default function StudentDashboard() {
       <div className="mb-6 sm:mb-8">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 sm:mb-6 gap-2">
           <h2 className="text-xl sm:text-2xl font-bold text-foreground">Recent Courses</h2>
-          <Link 
-            href="/student/courses" 
+          <Link
+            href="/student/courses"
             className="text-primary hover:text-primary/80 font-medium text-sm sm:text-base transition"
           >
             View All
@@ -150,11 +151,15 @@ export default function StudentDashboard() {
                 className="bg-card rounded-xl shadow-sm border border-border overflow-hidden hover:shadow-md transition"
               >
                 {enrollment.course.thumbnail && (
-                  <img
-                    src={enrollment.course.thumbnail || "/placeholder.svg"}
-                    alt={enrollment.course.title}
-                    className="w-full h-32 sm:h-40 object-cover"
-                  />
+                  <div className="relative w-full h-32 sm:h-40">
+                    <Image
+                      src={enrollment.course.thumbnail || "/placeholder.svg"}
+                      alt={enrollment.course.title}
+                      fill
+                      className="object-cover"
+                      sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                    />
+                  </div>
                 )}
                 <div className="p-3 sm:p-4">
                   <h3 className="font-bold text-base sm:text-lg text-foreground mb-2 line-clamp-1">

@@ -4,6 +4,7 @@ import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
 import Link from "next/link"
+import Image from "next/image"
 import { Leaf, Zap, Award, BookOpen } from "lucide-react"
 
 export default function Dashboard() {
@@ -128,11 +129,15 @@ export default function Dashboard() {
                   className="bg-white rounded-2xl shadow-sm border border-border overflow-hidden hover:shadow-md hover:border-primary/40 transition"
                 >
                   {enrollment.course.thumbnail && (
-                    <img
-                      src={enrollment.course.thumbnail || "/placeholder.svg"}
-                      alt={enrollment.course.title}
-                      className="w-full h-40 object-cover"
-                    />
+                    <div className="relative w-full h-40">
+                      <Image
+                        src={enrollment.course.thumbnail || "/placeholder.svg"}
+                        alt={enrollment.course.title}
+                        fill
+                        className="object-cover"
+                        sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                      />
+                    </div>
                   )}
                   <div className="p-6">
                     <h3 className="font-bold text-lg text-foreground mb-2">{enrollment.course.title}</h3>
