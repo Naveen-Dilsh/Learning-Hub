@@ -250,12 +250,6 @@ export default function InstructorDeliveries() {
         variant: "destructive",
       })
     },
-    onSuccess: () => {
-      // Mark deliveries as viewed when data loads successfully
-      if (typeof window !== "undefined") {
-        localStorage.setItem("instructor-deliveries-viewed", "true")
-      }
-    },
   })
 
   const deliveries = useMemo(() => deliveriesData?.deliveries || [], [deliveriesData])

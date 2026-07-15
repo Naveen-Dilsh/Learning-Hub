@@ -82,12 +82,6 @@ export default function StudentDeliveries() {
         description: error.message || "Failed to load deliveries. Please try again.",
       })
     },
-    onSuccess: () => {
-      // Mark deliveries as viewed when data loads successfully
-      if (typeof window !== "undefined") {
-        localStorage.setItem("deliveries-viewed", "true")
-      }
-    },
   })
 
   // Redirect if unauthenticated

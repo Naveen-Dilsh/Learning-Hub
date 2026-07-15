@@ -24,7 +24,7 @@ import {
   Video,
 } from "lucide-react"
 import { ThemeToggle } from "@/components/theme-toggle"
-import { useState, useMemo, useCallback, useEffect, useRef } from "react"
+import { useState, useMemo, useCallback, useEffect } from "react"
 import { useQuery } from "@tanstack/react-query"
 
 export function StudentSidebar() {
@@ -32,8 +32,8 @@ export function StudentSidebar() {
   const { sidebarOpen, setSidebarOpen } = useDashboard()
   const { data: session } = useSession()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  const [hasViewedDeliveries, setHasViewedDeliveries] = useState(false)
-  const [hasViewedLiveSessions, setHasViewedLiveSessions] = useState(false)
+  const [seenDeliveryCount, setSeenDeliveryCount] = useState(0)
+  const [seenLiveSessionCount, setSeenLiveSessionCount] = useState(0)
 
   // Memoize menu items - prevents recreation on every render
   const menuItems = useMemo(() => [
@@ -134,114 +134,51 @@ export function StudentSidebar() {
     }).length
   }, [liveSessionData, liveSessionLoading])
 
-  // Check if user has viewed deliveries page
+  // Load the seen counts from localStorage and keep them in sync across tabs
   useEffect(() => {
     if (typeof window === "undefined") return
 
-    const checkViewed = () => {
-      const viewed = localStorage.getItem("deliveries-viewed")
-      setHasViewedDeliveries(viewed === "true")
+    const syncSeenCounts = () => {
+      setSeenDeliveryCount(Number(localStorage.getItem("deliveries-seen-count")) || 0)
+      setSeenLiveSessionCount(Number(localStorage.getItem("live-sessions-seen-count")) || 0)
     }
 
-    // Check on mount and pathname change
-    checkViewed()
+    syncSeenCounts()
+    window.addEventListener("storage", syncSeenCounts)
+    return () => window.removeEventListener("storage", syncSeenCounts)
+  }, [])
 
-    // Mark as viewed when on deliveries page
-    if (pathname === "/student/deliveries") {
-      localStorage.setItem("deliveries-viewed", "true")
-      setHasViewedDeliveries(true)
-    }
+  // While the user is on the page, record the current count as "seen".
+  // Also lower the seen count when items resolve (e.g. a delivery arrives),
+  // so a future new item makes the badge reappear.
+  useEffect(() => {
+    if (typeof window === "undefined") return
 
-    // Listen for storage changes (when page sets it)
-    const handleStorageChange = (e) => {
-      if (e.key === "deliveries-viewed") {
-        setHasViewedDeliveries(e.newValue === "true")
+    if (!deliveryLoading) {
+      if (pathname === "/student/deliveries" || deliveryCount < seenDeliveryCount) {
+        localStorage.setItem("deliveries-seen-count", String(deliveryCount))
+        setSeenDeliveryCount(deliveryCount)
       }
     }
 
-    window.addEventListener("storage", handleStorageChange)
-    // Also check periodically in case localStorage was set by same window
-    // Note: storage event only fires across tabs, so we poll for same-window changes
-    const interval = setInterval(checkViewed, 500)
-
-    return () => {
-      window.removeEventListener("storage", handleStorageChange)
-      clearInterval(interval)
-    }
-  }, [pathname])
-
-  // Check if user has viewed live sessions page
-  useEffect(() => {
-    if (typeof window === "undefined") return
-
-    const checkViewed = () => {
-      const viewed = localStorage.getItem("live-sessions-viewed")
-      setHasViewedLiveSessions(viewed === "true")
-    }
-
-    // Check on mount and pathname change
-    checkViewed()
-
-    // Mark as viewed when on live sessions page
-    if (pathname === "/student/live-sessions") {
-      localStorage.setItem("live-sessions-viewed", "true")
-      setHasViewedLiveSessions(true)
-    }
-
-    // Listen for storage changes (when page sets it)
-    const handleStorageChange = (e) => {
-      if (e.key === "live-sessions-viewed") {
-        setHasViewedLiveSessions(e.newValue === "true")
+    if (!liveSessionLoading) {
+      if (pathname === "/student/live-sessions" || liveSessionCount < seenLiveSessionCount) {
+        localStorage.setItem("live-sessions-seen-count", String(liveSessionCount))
+        setSeenLiveSessionCount(liveSessionCount)
       }
     }
+  }, [pathname, deliveryCount, liveSessionCount, deliveryLoading, liveSessionLoading, seenDeliveryCount, seenLiveSessionCount])
 
-    window.addEventListener("storage", handleStorageChange)
-    // Also check periodically in case localStorage was set by same window
-    // Note: storage event only fires across tabs, so we poll for same-window changes
-    const interval = setInterval(checkViewed, 500)
-
-    return () => {
-      window.removeEventListener("storage", handleStorageChange)
-      clearInterval(interval)
-    }
-  }, [pathname])
-
-  // Track previous counts to detect when new items appear
-  const prevDeliveryCountRef = useRef(0)
-  const prevLiveSessionCountRef = useRef(0)
-
-  // Reset viewed status when count goes from 0 to > 0 (new items appeared)
-  useEffect(() => {
-    if (typeof window === "undefined") return
-
-    // If delivery count increased from 0, reset viewed status
-    if (prevDeliveryCountRef.current === 0 && deliveryCount > 0 && hasViewedDeliveries) {
-      localStorage.removeItem("deliveries-viewed")
-      setHasViewedDeliveries(false)
-    }
-    prevDeliveryCountRef.current = deliveryCount
-
-    // If live session count increased from 0, reset viewed status
-    if (prevLiveSessionCountRef.current === 0 && liveSessionCount > 0 && hasViewedLiveSessions) {
-      localStorage.removeItem("live-sessions-viewed")
-      setHasViewedLiveSessions(false)
-    }
-    prevLiveSessionCountRef.current = liveSessionCount
-  }, [deliveryCount, liveSessionCount, hasViewedDeliveries, hasViewedLiveSessions])
-
-  // Calculate badge count for deliveries (only show if not viewed and count > 0)
+  // Show the badge only when there are more items than the user has already seen
   const deliveryBadgeCount = useMemo(() => {
-    // Don't show badge if loading, viewed, or count is 0
-    if (deliveryLoading || hasViewedDeliveries || deliveryCount === 0) return 0
+    if (deliveryLoading || deliveryCount <= seenDeliveryCount) return 0
     return deliveryCount
-  }, [hasViewedDeliveries, deliveryCount, deliveryLoading])
+  }, [seenDeliveryCount, deliveryCount, deliveryLoading])
 
-  // Calculate badge count for live sessions (only show if not viewed and count > 0)
   const liveSessionBadgeCount = useMemo(() => {
-    // Don't show badge if loading, viewed, or count is 0
-    if (liveSessionLoading || hasViewedLiveSessions || liveSessionCount === 0) return 0
+    if (liveSessionLoading || liveSessionCount <= seenLiveSessionCount) return 0
     return liveSessionCount
-  }, [hasViewedLiveSessions, liveSessionCount, liveSessionLoading])
+  }, [seenLiveSessionCount, liveSessionCount, liveSessionLoading])
 
   return (
     <>

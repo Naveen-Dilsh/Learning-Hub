@@ -22,7 +22,7 @@ import {
   Package,
 } from "lucide-react"
 import { ThemeToggle } from "@/components/theme-toggle"
-import { useState, useEffect, useMemo, useRef } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useQuery } from "@tanstack/react-query"
 
 export function InstructorSidebar() {
@@ -30,8 +30,8 @@ export function InstructorSidebar() {
   const { sidebarOpen, setSidebarOpen } = useDashboard()
   const { data: session } = useSession()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  const [hasViewedEnrollments, setHasViewedEnrollments] = useState(false)
-  const [hasViewedDeliveries, setHasViewedDeliveries] = useState(false)
+  const [seenEnrollmentCount, setSeenEnrollmentCount] = useState(0)
+  const [seenDeliveryCount, setSeenDeliveryCount] = useState(0)
 
   const allMenuItems = [
     { href: "/instructor/dashboard", label: "Dashboard", icon: LayoutDashboard, gradient: "from-primary to-accent" },
@@ -141,113 +141,51 @@ export function InstructorSidebar() {
     ).length
   }, [deliveryData, deliveryLoading])
 
-  // Track previous counts to detect when new items appear
-  const prevEnrollmentCountRef = useRef(0)
-  const prevDeliveryCountRef = useRef(0)
-
-  // Reset viewed status when count goes from 0 to > 0 (new items appeared)
+  // Load the seen counts from localStorage and keep them in sync across tabs
   useEffect(() => {
     if (typeof window === "undefined") return
 
-    // If enrollment count increased from 0, reset viewed status
-    if (prevEnrollmentCountRef.current === 0 && enrollmentCount > 0 && hasViewedEnrollments) {
-      localStorage.removeItem("instructor-enrollments-viewed")
-      setHasViewedEnrollments(false)
+    const syncSeenCounts = () => {
+      setSeenEnrollmentCount(Number(localStorage.getItem("instructor-enrollments-seen-count")) || 0)
+      setSeenDeliveryCount(Number(localStorage.getItem("instructor-deliveries-seen-count")) || 0)
     }
-    prevEnrollmentCountRef.current = enrollmentCount
 
-    // If delivery count increased from 0, reset viewed status
-    if (prevDeliveryCountRef.current === 0 && deliveryCount > 0 && hasViewedDeliveries) {
-      localStorage.removeItem("instructor-deliveries-viewed")
-      setHasViewedDeliveries(false)
-    }
-    prevDeliveryCountRef.current = deliveryCount
-  }, [enrollmentCount, deliveryCount, hasViewedEnrollments, hasViewedDeliveries])
+    syncSeenCounts()
+    window.addEventListener("storage", syncSeenCounts)
+    return () => window.removeEventListener("storage", syncSeenCounts)
+  }, [])
 
-  // Check if user has viewed enrollments page
+  // While the user is on the page, record the current count as "seen".
+  // Also lower the seen count when items resolve (approved/shipped),
+  // so a future new item makes the badge reappear.
   useEffect(() => {
     if (typeof window === "undefined") return
 
-    const checkViewed = () => {
-      const viewed = localStorage.getItem("instructor-enrollments-viewed")
-      setHasViewedEnrollments(viewed === "true")
-    }
-
-    // Check on mount and pathname change
-    checkViewed()
-
-    // Mark as viewed when on enrollments page
-    if (pathname === "/instructor/enrollments/pending") {
-      localStorage.setItem("instructor-enrollments-viewed", "true")
-      setHasViewedEnrollments(true)
-    }
-
-    // Listen for storage changes (when page sets it)
-    const handleStorageChange = (e) => {
-      if (e.key === "instructor-enrollments-viewed") {
-        setHasViewedEnrollments(e.newValue === "true")
+    if (!enrollmentLoading) {
+      if (pathname === "/instructor/enrollments/pending" || enrollmentCount < seenEnrollmentCount) {
+        localStorage.setItem("instructor-enrollments-seen-count", String(enrollmentCount))
+        setSeenEnrollmentCount(enrollmentCount)
       }
     }
 
-    window.addEventListener("storage", handleStorageChange)
-    // Also check periodically in case localStorage was set by same window
-    // Note: storage event only fires across tabs, so we poll for same-window changes
-    const interval = setInterval(checkViewed, 500)
-
-    return () => {
-      window.removeEventListener("storage", handleStorageChange)
-      clearInterval(interval)
-    }
-  }, [pathname])
-
-  // Check if user has viewed deliveries page
-  useEffect(() => {
-    if (typeof window === "undefined") return
-
-    const checkViewed = () => {
-      const viewed = localStorage.getItem("instructor-deliveries-viewed")
-      setHasViewedDeliveries(viewed === "true")
-    }
-
-    // Check on mount and pathname change
-    checkViewed()
-
-    // Mark as viewed when on deliveries page
-    if (pathname === "/instructor/deliveries") {
-      localStorage.setItem("instructor-deliveries-viewed", "true")
-      setHasViewedDeliveries(true)
-    }
-
-    // Listen for storage changes (when page sets it)
-    const handleStorageChange = (e) => {
-      if (e.key === "instructor-deliveries-viewed") {
-        setHasViewedDeliveries(e.newValue === "true")
+    if (!deliveryLoading) {
+      if (pathname === "/instructor/deliveries" || deliveryCount < seenDeliveryCount) {
+        localStorage.setItem("instructor-deliveries-seen-count", String(deliveryCount))
+        setSeenDeliveryCount(deliveryCount)
       }
     }
+  }, [pathname, enrollmentCount, deliveryCount, enrollmentLoading, deliveryLoading, seenEnrollmentCount, seenDeliveryCount])
 
-    window.addEventListener("storage", handleStorageChange)
-    // Also check periodically in case localStorage was set by same window
-    // Note: storage event only fires across tabs, so we poll for same-window changes
-    const interval = setInterval(checkViewed, 500)
-
-    return () => {
-      window.removeEventListener("storage", handleStorageChange)
-      clearInterval(interval)
-    }
-  }, [pathname])
-
-  // Calculate badge counts (only show if not viewed and count > 0)
+  // Show the badge only when there are more items than the user has already seen
   const enrollmentBadgeCount = useMemo(() => {
-    // Don't show badge if loading, viewed, or count is 0
-    if (enrollmentLoading || hasViewedEnrollments || enrollmentCount === 0) return 0
+    if (enrollmentLoading || enrollmentCount <= seenEnrollmentCount) return 0
     return enrollmentCount
-  }, [hasViewedEnrollments, enrollmentCount, enrollmentLoading])
+  }, [seenEnrollmentCount, enrollmentCount, enrollmentLoading])
 
   const deliveryBadgeCount = useMemo(() => {
-    // Don't show badge if loading, viewed, or count is 0
-    if (deliveryLoading || hasViewedDeliveries || deliveryCount === 0) return 0
+    if (deliveryLoading || deliveryCount <= seenDeliveryCount) return 0
     return deliveryCount
-  }, [hasViewedDeliveries, deliveryCount, deliveryLoading])
+  }, [seenDeliveryCount, deliveryCount, deliveryLoading])
 
   return (
     <>

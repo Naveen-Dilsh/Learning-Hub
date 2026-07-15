@@ -206,12 +206,6 @@ export default function StudentLiveSessionsPage() {
         description: error.message || "Failed to load live sessions. Please try again.",
       })
     },
-    onSuccess: () => {
-      // Mark live sessions as viewed when data loads successfully
-      if (typeof window !== "undefined") {
-        localStorage.setItem("live-sessions-viewed", "true")
-      }
-    },
   })
 
   const liveSessions = useMemo(() => {
