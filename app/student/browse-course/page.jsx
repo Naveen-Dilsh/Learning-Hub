@@ -4,11 +4,11 @@ import { useQuery } from "@tanstack/react-query"
 import { useState, useMemo, useCallback, memo } from "react"
 import { useSession } from "next-auth/react"
 import Link from "next/link"
-import { Search, BookOpen, Users, Video } from "lucide-react"
+import { Search, BookOpen, Users, Video, CheckCircle } from "lucide-react"
 import LoadingBubbles from "@/components/loadingBubbles"
 
 // Memoized Course Card Component
-const CourseCard = memo(({ course }) => (
+const CourseCard = memo(({ course, isEnrolled }) => (
   <div className="group bg-card rounded-xl shadow-sm border border-border overflow-hidden hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
     {/* Course Thumbnail */}
     <div className="relative h-40 sm:h-48 bg-muted overflow-hidden">
@@ -60,12 +60,22 @@ const CourseCard = memo(({ course }) => (
         >
           View Details
         </Link>
-        <Link
-          href={`/student/browse-course/${course.id}/purchase`}
-          className="btn-outline block w-full px-3 py-2 rounded-lg text-xs font-semibold text-center active:scale-[0.98]"
-        >
-          Enroll Now
-        </Link>
+        {isEnrolled ? (
+          <Link
+            href={`/student/browse-course/${course.id}/watch`}
+            className="btn-success flex items-center justify-center gap-1.5 w-full px-3 py-2 rounded-lg text-xs font-semibold text-center active:scale-[0.98]"
+          >
+            <CheckCircle className="w-3.5 h-3.5" />
+            Continue Learning
+          </Link>
+        ) : (
+          <Link
+            href={`/student/browse-course/${course.id}/purchase`}
+            className="btn-outline block w-full px-3 py-2 rounded-lg text-xs font-semibold text-center active:scale-[0.98]"
+          >
+            Enroll Now
+          </Link>
+        )}
       </div>
     </div>
   </div>
@@ -96,6 +106,21 @@ export default function CourseBrowser() {
     },
     staleTime: 30 * 1000, // 30 seconds
   })
+
+  // Fetch the student's enrollments so enrolled courses show "Continue Learning"
+  const { data: enrolledCourseIds } = useQuery({
+    queryKey: ["my-enrolled-course-ids", session?.user?.id],
+    queryFn: async () => {
+      const res = await fetch(`/api/student/enrollments?studentId=${session.user.id}`)
+      if (!res.ok) return []
+      const data = await res.json()
+      return (data.enrollments || []).map((e) => e.course.id)
+    },
+    enabled: !!session?.user?.id,
+    staleTime: 30 * 1000,
+  })
+
+  const enrolledSet = useMemo(() => new Set(enrolledCourseIds || []), [enrolledCourseIds])
 
   // Memoized filtered courses
   const filteredCourses = useMemo(() => {
@@ -182,7 +207,7 @@ export default function CourseBrowser() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-4 sm:gap-6">
               {filteredCourses.map((course) => (
-                <CourseCard key={course.id} course={course} />
+                <CourseCard key={course.id} course={course} isEnrolled={enrolledSet.has(course.id)} />
               ))}
             </div>
           </>

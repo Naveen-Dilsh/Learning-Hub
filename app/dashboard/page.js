@@ -158,7 +158,7 @@ export default function Dashboard() {
 
                     <div className="flex gap-2">
                       <Link
-                        href={`/courses/${enrollment.course.id}/watch`}
+                        href={`/student/browse-course/${enrollment.course.id}/watch`}
                         className="flex-1 px-3 py-2 bg-gradient-to-r from-primary to-secondary text-white rounded-lg text-center text-sm hover:shadow-md transition font-medium"
                       >
                         Continue
