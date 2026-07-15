@@ -48,6 +48,12 @@ const nextConfig = {
     optimizePackageImports: ['lucide-react', '@radix-ui/react-dialog'],
   },
 
+  // ✅ Bundle the signature font with the serverless functions that
+  // generate certificate PDFs
+  outputFileTracingIncludes: {
+    '/api/**': ['./lib/fonts/**'],
+  },
+
   // ✅ Headers for caching + CSP
   async headers() {
     return [

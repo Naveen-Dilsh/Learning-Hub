@@ -19,6 +19,7 @@
     "@aws-sdk/s3-request-presigner": "^3.943.0",
     "@emotion/is-prop-valid": "latest",
     "@neondatabase/serverless": "^1.0.2",
+    "@pdf-lib/fontkit": "^1.1.1",
     "@prisma/adapter-neon": "^6.19.0",
     "@radix-ui/react-accordion": "latest",
     "@radix-ui/react-alert-dialog": "latest",
