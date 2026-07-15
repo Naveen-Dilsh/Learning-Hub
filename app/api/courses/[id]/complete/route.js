@@ -42,6 +42,9 @@ export async function POST(request, { params }) {
           select: {
             id: true,
             title: true,
+            instructor: {
+              select: { name: true, email: true },
+            },
             _count: {
               select: { videos: true },
             },
@@ -161,12 +164,18 @@ export async function POST(request, { params }) {
     let fileKey = null
 
     try {
+      const instructorName =
+        enrollment.course.instructor?.name ||
+        enrollment.course.instructor?.email?.split("@")[0]
+
       fileKey = await generateCertificatePDF({
         studentName: user.name || user.email,
         fallbackStudentName: user.email,
         courseTitle: enrollment.course.title,
         certificateId: certificate.id,
         issuedAt: certificate.issuedAt,
+        instructorName: instructorName,
+        organizationName: "E-Pencil",
       })
 
       console.log(`[Certificate] Generated PDF and uploaded to R2: ${fileKey}`)
