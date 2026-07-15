@@ -40,7 +40,7 @@ export async function POST(req) {
       },
     })
 
-    if (!enrollment) {
+    if (!enrollment || enrollment.status !== "APPROVED") {
       return Response.json({ error: "Not enrolled in this course" }, { status: 403 })
     }
 

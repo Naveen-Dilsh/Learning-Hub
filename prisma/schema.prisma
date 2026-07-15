@@ -46,6 +46,7 @@ model User {
   receivedMessages Message[] @relation("ReceivedMessages")
   payouts       Payout[] @relation("InstructorPayouts")
   sessionJoinLogs SessionJoinLog[] @relation("StudentSessionJoins")
+  quizAttempts  QuizAttempt[] @relation("StudentQuizAttempts")
 
   @@index([email])
   @@index([role])
@@ -73,6 +74,7 @@ model Course {
   certificates  Certificate[] @relation("CourseCertificates")
   liveSessions  LiveSession[] @relation("CourseLiveSessions")
   resources     CourseResource[] @relation("CourseResources")
+  quiz          Quiz? @relation("CourseQuiz")
 
   @@index([instructorId])
   @@index([published])
@@ -87,7 +89,8 @@ model Video {
   courseId      String
   course        Course    @relation(fields: [courseId], references: [id], onDelete: Cascade)
   
-  cloudflareStreamId String  // Cloudflare Stream video ID
+  cloudflareStreamId String?  // Legacy Cloudflare Stream video ID (kept for old videos)
+  youtubeVideoId String?   // YouTube video ID (unlisted video on the channel)
   duration      Int?      // Duration in seconds
   order         Int       @default(0)
   isFree        Boolean   @default(false) // Free preview videos visible to non-enrolled users
@@ -97,9 +100,27 @@ model Video {
 
   // Relations
   progress      VideoProgress[]
+  questions     VideoQuestion[]
 
   @@index([courseId])
   @@unique([courseId, order])
+}
+
+model VideoQuestion {
+  id            String    @id @default(cuid())
+  videoId       String
+  video         Video     @relation(fields: [videoId], references: [id], onDelete: Cascade)
+
+  text          String    @db.Text
+  options       Json      // Array of option strings (2-6 options)
+  correctIndex  Int       // Index of the correct option
+  triggerTime   Int?      // Seconds into the video when the popup appears; null = spaced evenly
+  order         Int       @default(0)
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([videoId])
 }
 
 model Enrollment {
@@ -380,6 +401,52 @@ model Delivery {
   @@index([enrollmentId, status]) // Composite for enrollment-based queries
   @@index([createdAt(sort: Desc)]) // For sorting deliveries by date
   @@index([status, createdAt(sort: Desc)]) // Composite for filtered + sorted queries
+}
+
+model Quiz {
+  id            String    @id @default(cuid())
+  courseId      String    @unique // One final quiz per course
+  course        Course    @relation("CourseQuiz", fields: [courseId], references: [id], onDelete: Cascade)
+
+  title         String    @default("Final Quiz")
+  passingScore  Int       @default(70) // Percentage required to pass (0-100)
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  questions     QuizQuestion[]
+  attempts      QuizAttempt[]
+}
+
+model QuizQuestion {
+  id            String    @id @default(cuid())
+  quizId        String
+  quiz          Quiz      @relation(fields: [quizId], references: [id], onDelete: Cascade)
+
+  text          String    @db.Text
+  options       Json      // Array of option strings (2-6 options)
+  correctIndex  Int       // Index of the correct option
+  order         Int       @default(0)
+
+  @@index([quizId])
+}
+
+model QuizAttempt {
+  id            String    @id @default(cuid())
+  quizId        String
+  quiz          Quiz      @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  studentId     String
+  student       User      @relation("StudentQuizAttempts", fields: [studentId], references: [id], onDelete: Cascade)
+
+  score         Int       // Percentage 0-100
+  passed        Boolean
+  answers       Json      // Array of selected option indexes
+
+  createdAt     DateTime  @default(now())
+
+  @@index([quizId, studentId])
+  @@index([studentId])
 }
 
 model PasswordResetToken {

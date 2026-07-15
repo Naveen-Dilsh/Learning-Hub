@@ -2,10 +2,15 @@ import { prisma } from "@/lib/db"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { generatePayHereHash, formatPayHereAmount } from "@/lib/payhere"
+import { ONLINE_PAYMENTS_ENABLED, ONLINE_PAYMENTS_DISABLED_MESSAGE } from "@/lib/payment-config"
 import { NextResponse } from "next/server"
 
 export async function POST(request) {
   try {
+    if (!ONLINE_PAYMENTS_ENABLED) {
+      return NextResponse.json({ message: ONLINE_PAYMENTS_DISABLED_MESSAGE }, { status: 503 })
+    }
+
     const session = await getServerSession(authOptions)
 
     if (!session) {

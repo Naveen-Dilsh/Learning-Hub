@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation"
 import { useSession } from "next-auth/react"
 import { useQuery } from "@tanstack/react-query"
 import { useCartStore } from "@/lib/stores"
+import { ONLINE_PAYMENTS_ENABLED } from "@/lib/payment-config"
 import { useToast } from "@/hooks/use-toast"
 import Link from "next/link"
 import LoadingBubbles from "@/components/loadingBubbles"
@@ -247,7 +248,9 @@ export default function PurchaseCourse() {
           <h1 className="text-2xl sm:text-3xl font-bold text-foreground">
             Complete Your Purchase
           </h1>
-          <p className="text-sm sm:text-base text-muted-foreground mt-1">Secure checkout with PayHere</p>
+          <p className="text-sm sm:text-base text-muted-foreground mt-1">
+            {ONLINE_PAYMENTS_ENABLED ? "Secure checkout with PayHere" : "Secure checkout"}
+          </p>
         </div>
       </div>
 
@@ -429,35 +432,39 @@ export default function PurchaseCourse() {
 
             {/* Payment Buttons */}
             <div className="space-y-3 pt-2">
-              <button
-                onClick={handlePurchase}
-                disabled={isPaymentDisabled}
-                className={`w-full flex items-center justify-center gap-2 sm:gap-3 py-3 sm:py-4 px-4 sm:px-6 rounded-xl font-semibold text-sm sm:text-base lg:text-lg transition-all shadow-lg active:scale-[0.98] ${
-                  isPaymentDisabled
-                    ? 'bg-muted text-muted-foreground cursor-not-allowed'
-                    : 'btn-primary hover:shadow-xl'
-                }`}
-              >
-                {processing ? (
-                  <>
-                    <div className="w-4 h-4 sm:w-5 sm:h-5 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin"></div>
-                    <span>Processing...</span>
-                  </>
-                ) : (
-                  <>
-                    <CreditCard className="w-4 h-4 sm:w-5 sm:h-5" />
-                    <span>Pay with PayHere</span>
-                  </>
-                )}
-              </button>
-
-              <Link href={`/student/browse-course/${course.id}/enroll-manual?requiresDelivery=${requiresDelivery}`}>
-                <button 
+              {ONLINE_PAYMENTS_ENABLED && (
+                <button
+                  onClick={handlePurchase}
                   disabled={isPaymentDisabled}
-                  className={`w-full flex items-center justify-center gap-2 sm:gap-3 py-3 sm:py-4 px-4 sm:px-6 rounded-xl font-semibold text-sm sm:text-base lg:text-lg transition-all shadow-md active:scale-[0.98] ${
+                  className={`w-full flex items-center justify-center gap-2 sm:gap-3 py-3 sm:py-4 px-4 sm:px-6 rounded-xl font-semibold text-sm sm:text-base lg:text-lg transition-all shadow-lg active:scale-[0.98] ${
                     isPaymentDisabled
                       ? 'bg-muted text-muted-foreground cursor-not-allowed'
-                      : 'btn-secondary hover:shadow-lg'
+                      : 'btn-primary hover:shadow-xl'
+                  }`}
+                >
+                  {processing ? (
+                    <>
+                      <div className="w-4 h-4 sm:w-5 sm:h-5 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin"></div>
+                      <span>Processing...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CreditCard className="w-4 h-4 sm:w-5 sm:h-5" />
+                      <span>Pay with PayHere</span>
+                    </>
+                  )}
+                </button>
+              )}
+
+              <Link href={`/student/browse-course/${course.id}/enroll-manual?requiresDelivery=${requiresDelivery}`}>
+                <button
+                  disabled={isPaymentDisabled}
+                  className={`w-full flex items-center justify-center gap-2 sm:gap-3 py-3 sm:py-4 px-4 sm:px-6 rounded-xl font-semibold text-sm sm:text-base lg:text-lg transition-all active:scale-[0.98] ${
+                    isPaymentDisabled
+                      ? 'bg-muted text-muted-foreground cursor-not-allowed'
+                      : ONLINE_PAYMENTS_ENABLED
+                        ? 'btn-secondary hover:shadow-lg shadow-md'
+                        : 'btn-primary hover:shadow-xl shadow-lg'
                   }`}
                 >
                   <Lock className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -465,10 +472,17 @@ export default function PurchaseCourse() {
                 </button>
               </Link>
 
-              <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground pt-2">
-                <Lock className="w-3 h-3" />
-                Secure payment powered by PayHere
-              </div>
+              {ONLINE_PAYMENTS_ENABLED ? (
+                <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground pt-2">
+                  <Lock className="w-3 h-3" />
+                  Secure payment powered by PayHere
+                </div>
+              ) : (
+                <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground pt-2 text-center">
+                  <Lock className="w-3 h-3 flex-shrink-0" />
+                  Pay via ATM or bank transfer and upload your payment receipt. Online card payment is coming soon.
+                </div>
+              )}
             </div>
           </div>
         </div>

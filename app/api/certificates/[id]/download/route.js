@@ -18,12 +18,22 @@ const S3 = new S3Client({
 
 const BUCKET_NAME = process.env.R2_BUCKET_NAME || "lms-resources"
 
+// Build a download filename that survives non-Latin (Sinhala/Tamil) course titles
+function certificateFileName(courseTitle) {
+  const cleaned = courseTitle.replace(/[^a-zA-Z0-9]+/g, "_").replace(/^_+|_+$/g, "")
+  return cleaned ? `Certificate-${cleaned}.pdf` : "Certificate.pdf"
+}
+
 export async function GET(request, { params }) {
   try {
     const session = await getServerSession(authOptions)
 
     if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      // Certificate emails link here directly - send browsers to the
+      // sign-in page (and back) instead of returning a JSON error
+      const signInUrl = new URL("/auth/signin", request.url)
+      signInUrl.searchParams.set("callbackUrl", request.url)
+      return NextResponse.redirect(signInUrl)
     }
 
     const { id: certificateId } = await params
@@ -77,6 +87,7 @@ export async function GET(request, { params }) {
         
         const fileKey = await generateCertificatePDF({
           studentName: certificate.student.name || certificate.student.email,
+          fallbackStudentName: certificate.student.email,
           courseTitle: certificate.course.title,
           certificateId: certificateId,
           issuedAt: certificate.issuedAt,
@@ -93,9 +104,9 @@ export async function GET(request, { params }) {
         })
 
         console.log(`[Certificate] Successfully regenerated PDF for certificate ${certificateId}: ${fileKey}`)
-        
+
         // Continue with download using the new file key
-        const fileName = `Certificate-${certificate.course.title.replace(/[^a-zA-Z0-9]/g, "_")}.pdf`
+        const fileName = certificateFileName(certificate.course.title)
         const downloadUrl = await getDownloadUrl(
           fileKey,
           3600, // 1 hour expiry
@@ -117,25 +128,18 @@ export async function GET(request, { params }) {
 
     console.log(`[Certificate] Download request for certificate ${certificateId}, certificateUrl: ${certificate.certificateUrl?.substring(0, 100)}...`)
 
-    // If certificateUrl is already a full URL (presigned URL), check if it's still valid
-    if (certificate.certificateUrl.startsWith("http")) {
-      // Try to redirect, but if it fails, regenerate
-      try {
-        return NextResponse.redirect(certificate.certificateUrl)
-      } catch (error) {
-        console.warn(`[Certificate] Presigned URL may be expired, will regenerate: ${error.message}`)
-        // Fall through to regenerate
-      }
-    }
-
-    // If certificateUrl is a file key, generate presigned URL
-    // Extract file key (remove any URL parts if it's a full URL)
+    // certificateUrl should be an R2 file key. Older records may hold a full
+    // presigned URL - those expire after 7 days at most, so never redirect to
+    // them; extract the file key and mint a fresh short-lived URL instead.
     let fileKey = certificate.certificateUrl
     if (fileKey.startsWith("http")) {
-      // Extract key from URL if it's a full R2 URL
       try {
         const url = new URL(fileKey)
         fileKey = url.pathname.startsWith("/") ? url.pathname.slice(1) : url.pathname
+        // Path-style R2 URLs include the bucket name before the key
+        if (fileKey.startsWith(`${BUCKET_NAME}/`)) {
+          fileKey = fileKey.slice(BUCKET_NAME.length + 1)
+        }
       } catch (e) {
         // If URL parsing fails, use the original value
         console.warn(`[Certificate] Could not parse URL, using as file key: ${fileKey}`)
@@ -161,6 +165,7 @@ export async function GET(request, { params }) {
           
           const newFileKey = await generateCertificatePDF({
             studentName: certificate.student.name || certificate.student.email,
+            fallbackStudentName: certificate.student.email,
             courseTitle: certificate.course.title,
             certificateId: certificateId,
             issuedAt: certificate.issuedAt,
@@ -176,7 +181,7 @@ export async function GET(request, { params }) {
             },
           })
 
-          const fileName = `Certificate-${certificate.course.title.replace(/[^a-zA-Z0-9]/g, "_")}.pdf`
+          const fileName = certificateFileName(certificate.course.title)
           const downloadUrl = await getDownloadUrl(newFileKey, 3600, fileName)
           return NextResponse.redirect(downloadUrl)
         } catch (regenError) {
@@ -195,7 +200,7 @@ export async function GET(request, { params }) {
     }
 
     try {
-      const fileName = `Certificate-${certificate.course.title.replace(/[^a-zA-Z0-9]/g, "_")}.pdf`
+      const fileName = certificateFileName(certificate.course.title)
       const downloadUrl = await getDownloadUrl(
         fileKey,
         3600, // 1 hour expiry

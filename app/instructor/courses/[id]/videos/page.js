@@ -5,13 +5,13 @@ import { useParams, useRouter } from "next/navigation"
 import { useSession } from "next-auth/react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import Link from "next/link"
-import { ArrowLeft, Video, Trash2, Edit, Users, DollarSign, Clock, PlayCircle, Check, X, Eye, EyeOff } from "lucide-react"
-import TusVideoUploader from "@/components/tus-video-uploader"
+import { ArrowLeft, Video, Trash2, Edit, Users, DollarSign, Clock, PlayCircle, Check, X, Eye, EyeOff, GraduationCap, MessageCircleQuestion } from "lucide-react"
+import YouTubeVideoForm from "@/components/youtube-video-form"
 import LoadingBubbles from "@/components/loadingBubbles"
 import { useToast } from "@/hooks/use-toast"
 
 // Memoized Video Card Component
-const VideoCard = memo(({ video, index, onEdit, onDelete, onToggleFree, isEditing, videoForm, onFormChange, onSave, onCancel }) => {
+const VideoCard = memo(({ video, index, questionsHref, onEdit, onDelete, onToggleFree, isEditing, videoForm, onFormChange, onSave, onCancel }) => {
   return (
     <div className="bg-muted/50 rounded-xl sm:rounded-2xl border border-border p-4 sm:p-6 hover:border-primary/50 hover:shadow-md transition-all duration-200">
       {isEditing ? (
@@ -59,6 +59,13 @@ const VideoCard = memo(({ video, index, onEdit, onDelete, onToggleFree, isEditin
                   {index + 1}. {video.title}
                 </h4>
                 <div className="flex gap-1 sm:gap-2 flex-shrink-0">
+                  <Link
+                    href={questionsHref}
+                    className="p-1.5 sm:p-2 text-primary hover:bg-primary/10 rounded-lg transition"
+                    title="In-video questions"
+                  >
+                    <MessageCircleQuestion className="w-4 h-4 sm:w-5 sm:h-5" />
+                  </Link>
                   <button
                     onClick={onEdit}
                     className="p-1.5 sm:p-2 text-primary hover:bg-primary/10 rounded-lg transition"
@@ -87,8 +94,8 @@ const VideoCard = memo(({ video, index, onEdit, onDelete, onToggleFree, isEditin
                     </span>
                   </div>
                 )}
-                <span className="bg-background px-2 sm:px-3 py-1 sm:py-1.5 rounded-md border border-border font-mono text-xs">
-                  {video.cloudflareStreamId?.slice(0, 8)}...
+                <span className="bg-background px-2 sm:px-3 py-1 sm:py-1.5 rounded-md border border-border text-xs font-medium text-red-600 dark:text-red-400">
+                  YouTube
                 </span>
               </div>
             </div>
@@ -417,6 +424,13 @@ export default function ManageVideos() {
 
             {/* Stats */}
             <div className="flex items-center gap-3 sm:gap-4">
+              <Link
+                href={`/instructor/courses/${params.id}/quiz`}
+                className="btn-secondary flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg font-semibold text-sm"
+              >
+                <GraduationCap className="w-4 h-4 sm:w-5 sm:h-5" />
+                Final Quiz
+              </Link>
               <div className="bg-muted px-3 sm:px-4 py-2 rounded-lg border border-border">
                 <div className="text-xs sm:text-sm text-muted-foreground">Total Videos</div>
                 <div className="text-lg sm:text-xl font-bold text-foreground">{videoCount}</div>
@@ -492,9 +506,9 @@ export default function ManageVideos() {
 
           {/* Right Column - Videos Management */}
           <div className="lg:col-span-2 space-y-4 sm:space-y-6">
-            {/* TUS Upload Section */}
-            <TusVideoUploader 
-              courseId={params.id} 
+            {/* Add YouTube Video Section */}
+            <YouTubeVideoForm
+              courseId={params.id}
               onUploadComplete={handleUploadComplete}
             />
 
@@ -534,6 +548,7 @@ export default function ManageVideos() {
                         key={video.id}
                         video={video}
                         index={index}
+                        questionsHref={`/instructor/courses/${params.id}/videos/${video.id}/questions`}
                         onEdit={() => handleEditVideo(video)}
                         onDelete={() => setDeleteConfirm(video)}
                         onToggleFree={() => handleToggleFree(video.id, video.isFree)}

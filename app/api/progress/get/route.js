@@ -38,7 +38,7 @@ export async function GET(request) {
       },
     })
 
-    if (!enrollment) {
+    if (!enrollment || enrollment.status !== "APPROVED") {
       return NextResponse.json({ error: "Not enrolled in this course" }, { status: 403 })
     }
 

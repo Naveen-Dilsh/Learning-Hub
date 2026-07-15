@@ -2,12 +2,12 @@ import { prisma } from "@/lib/db"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { NextResponse } from "next/server"
+import { extractYouTubeVideoId } from "@/lib/youtube"
 
 export async function POST(request, { params }) {
   try {
-    // ✅ FIX 1: Await params
     const resolvedParams = await params;
-    
+
     const session = await getServerSession(authOptions)
 
     if (!session) {
@@ -26,13 +26,22 @@ export async function POST(request, { params }) {
       return NextResponse.json({ message: "Forbidden" }, { status: 403 })
     }
 
-    const { title, description, cloudflareStreamId, duration } = await request.json()
+    const { title, description, youtubeUrl, duration } = await request.json()
 
-    if (!title || !cloudflareStreamId) {
+    if (!title || !youtubeUrl) {
       return NextResponse.json({ message: "Missing required fields" }, { status: 400 })
     }
 
-    // ✅ FIX 2: Get the maximum order value instead of count
+    const youtubeVideoId = extractYouTubeVideoId(youtubeUrl)
+
+    if (!youtubeVideoId) {
+      return NextResponse.json(
+        { message: "Invalid YouTube link. Paste a link like https://youtu.be/VIDEO_ID" },
+        { status: 400 }
+      )
+    }
+
+    // Get the maximum order value to keep (courseId, order) unique
     const maxOrderVideo = await prisma.video.findFirst({
       where: { courseId: resolvedParams.id },
       orderBy: { order: 'desc' },
@@ -41,62 +50,24 @@ export async function POST(request, { params }) {
 
     const nextOrder = maxOrderVideo ? maxOrderVideo.order + 1 : 0
 
-    console.log("Creating video with order:", nextOrder)
-    console.log("Cloudflare Stream ID:", cloudflareStreamId)
-    
     const video = await prisma.video.create({
       data: {
         title,
         description,
-        cloudflareStreamId,
+        youtubeVideoId,
         duration: duration || 0,
         courseId: resolvedParams.id,
-        order: nextOrder, // Use the next available order
+        order: nextOrder,
       },
     })
-    
-    console.log("Video created successfully:", video)
+
+    console.log("Video created successfully:", video.id, "YouTube ID:", youtubeVideoId)
     return NextResponse.json(video, { status: 201 })
   } catch (error) {
     console.error("Error creating video:", error)
-    return NextResponse.json({ 
+    return NextResponse.json({
       message: "Internal server error",
-      error: error.message 
+      error: error.message
     }, { status: 500 })
   }
 }
-
-// Quick Fix Summary
-// Problem: Video uploads to Cloudflare but doesn't save to database.
-// Two Issues Found:
-// 1. Next.js 15 Params Issue
-// javascript// ❌ Old (broken)
-// export async function POST(request, { params }) {
-//   where: { id: params.id }
-// }
-
-// // ✅ New (fixed)
-// export async function POST(request, { params }) {
-//   const resolvedParams = await params;
-//   where: { id: resolvedParams.id }
-// }
-// Why: Next.js 15 requires awaiting params before use.
-// 2. Duplicate Order Number
-// javascript// ❌ Old (can duplicate orders)
-// const videoCount = await prisma.video.count({
-//   where: { courseId: params.id }
-// })
-// order: videoCount
-
-// // ✅ New (always unique)
-// const maxOrderVideo = await prisma.video.findFirst({
-//   where: { courseId: resolvedParams.id },
-//   orderBy: { order: 'desc' }
-// })
-// const nextOrder = maxOrderVideo ? maxOrderVideo.order + 1 : 0
-// order: nextOrder
-// Why: Database has unique constraint on (courseId, order). Using count can create duplicates if videos are deleted or uploads fail.
-// Apply these fixes to both:
-
-// /api/courses/[id]/videos/route.js
-// /api/courses/[id]/videos/upload/route.js

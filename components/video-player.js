@@ -2,80 +2,131 @@
 
 import { useEffect, useState, useRef, useCallback } from "react"
 import { useVideoStore } from "@/lib/stores"
+import { Play, Pause, Volume2, VolumeX, Maximize, RotateCcw } from "lucide-react"
+
+// Load the YouTube IFrame Player API once and share the promise across players
+let youtubeApiPromise = null
+function loadYouTubeApi() {
+  if (typeof window === "undefined") return Promise.reject(new Error("No window"))
+  if (window.YT && window.YT.Player) return Promise.resolve(window.YT)
+  if (youtubeApiPromise) return youtubeApiPromise
+
+  youtubeApiPromise = new Promise((resolve, reject) => {
+    const previousCallback = window.onYouTubeIframeAPIReady
+    window.onYouTubeIframeAPIReady = () => {
+      if (typeof previousCallback === "function") previousCallback()
+      resolve(window.YT)
+    }
+
+    const script = document.createElement("script")
+    script.src = "https://www.youtube.com/iframe_api"
+    script.async = true
+    script.onerror = () => reject(new Error("Failed to load YouTube player"))
+    document.body.appendChild(script)
+  })
+
+  return youtubeApiPromise
+}
+
+function formatTime(seconds) {
+  if (!seconds || seconds < 0 || !isFinite(seconds)) return "0:00"
+  const h = Math.floor(seconds / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  const s = Math.floor(seconds % 60)
+  if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`
+  return `${m}:${String(s).padStart(2, "0")}`
+}
 
 export default function VideoPlayer({ videoId, courseId, videoTitle, userName, userId }) {
-  const [embedUrl, setEmbedUrl] = useState(null)
+  const [youtubeVideoId, setYoutubeVideoId] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [playbackTime, setPlaybackTimeState] = useState(0)
-  const [duration, setDurationState] = useState(0)
   const [watermarkPosition, setWatermarkPosition] = useState({ x: 10, y: 10 })
+
+  // Custom player controls state
+  const [playerReady, setPlayerReady] = useState(false)
+  const [isPlaying, setIsPlaying] = useState(false)
+  const [hasEnded, setHasEnded] = useState(false)
+  const [isMuted, setIsMuted] = useState(false)
+  const [currentTime, setCurrentTime] = useState(0)
+  const [videoDuration, setVideoDuration] = useState(0)
+  // Masks that hide YouTube's title/logo overlays while they are visible
+  // (YouTube shows them for a few seconds after play/seek, then fades them)
+  const [maskVisible, setMaskVisible] = useState(true)
+  const maskTimeoutRef = useRef(null)
+
+  // In-video checkpoint questions: the video pauses at each one and only
+  // resumes after the student answers correctly
+  const checkpointsRef = useRef([])
+  const activeCheckpointRef = useRef(null)
+  const [activeCheckpoint, setActiveCheckpoint] = useState(null)
+  const [checkpointWrong, setCheckpointWrong] = useState(false)
+  const [checkpointSubmitting, setCheckpointSubmitting] = useState(false)
+
   const hasCompletedVideoRef = useRef(false)
+  const wrapperRef = useRef(null)
   const playerContainerRef = useRef(null)
-  const streamPlayerRef = useRef(null)
-  const progressUpdateTimeoutRef = useRef(null)
-  const lastProgressUpdateRef = useRef(0)
+  const ytPlayerRef = useRef(null)
+  const pollIntervalRef = useRef(null)
+  const lastProgressSaveRef = useRef(0)
   const isUpdatingProgressRef = useRef(false)
+  const isSeekingRef = useRef(false)
   const existingProgressRef = useRef(null) // Store existing progress from database
   const maxWatchedTimeRef = useRef(0) // Track maximum watched time in current session
-  const sessionStartTimeRef = useRef(0) // Track when current session started
 
   // Only get the functions we need, not the state values that cause re-renders
   const markVideoComplete = useVideoStore((state) => state.markVideoComplete)
   const setPlaybackTime = useVideoStore((state) => state.setPlaybackTime)
   const setDuration = useVideoStore((state) => state.setDuration)
 
-  const accountId = process.env.NEXT_PUBLIC_CLOUDFLARE_ACCOUNT_ID
-  
   const previousVideoRef = useRef(`${videoId}-${courseId}`)
-  
+
   useEffect(() => {
     const currentVideoKey = `${videoId}-${courseId}`
-    
+
     // Only reset if video actually changed
     if (previousVideoRef.current !== currentVideoKey) {
       previousVideoRef.current = currentVideoKey
-      
+
       // Reset completion state when video changes
       hasCompletedVideoRef.current = false
       isUpdatingProgressRef.current = false
-      lastProgressUpdateRef.current = 0
+      lastProgressSaveRef.current = 0
       maxWatchedTimeRef.current = 0
-      sessionStartTimeRef.current = 0
       existingProgressRef.current = null
-      // Reset local state
-      setPlaybackTimeState(0)
-      setDurationState(0)
-      // Clear any pending progress updates
-      if (progressUpdateTimeoutRef.current) {
-        clearTimeout(progressUpdateTimeoutRef.current)
-        progressUpdateTimeoutRef.current = null
-      }
-      // Reset embedUrl to trigger new video load
-      setEmbedUrl(null)
+      // Reset player state to trigger new video load
+      setYoutubeVideoId(null)
+      setPlayerReady(false)
+      setIsPlaying(false)
+      setHasEnded(false)
+      setCurrentTime(0)
+      setVideoDuration(0)
       setLoading(true)
       setError(null)
+      // Reset checkpoint questions
+      activeCheckpointRef.current = null
+      setActiveCheckpoint(null)
+      setCheckpointWrong(false)
     }
   }, [videoId, courseId])
-  
-  if (!accountId || accountId === "undefined") {
-    return (
-      <div className="w-full bg-red-50 rounded-lg flex items-center justify-center p-6" style={{ aspectRatio: "16/9" }}>
-        <div className="text-center max-w-md">
-          <p className="text-red-600 font-bold mb-2">Cloudflare Stream Not Configured</p>
-          <p className="text-sm text-red-500 mb-4">
-            Environment variable <code className="bg-red-100 px-2 py-1 rounded">NEXT_PUBLIC_CLOUDFLARE_ACCOUNT_ID</code> is missing.
-          </p>
-          <ol className="text-xs text-gray-600 text-left space-y-2 mb-4">
-            <li>1. Get your Account ID from Cloudflare Dashboard → Stream</li>
-            <li>2. Add to v0 Vars: <code className="bg-gray-100 px-1">NEXT_PUBLIC_CLOUDFLARE_ACCOUNT_ID=YOUR_ID</code></li>
-            <li>3. Refresh this page</li>
-          </ol>
-          <p className="text-xs text-gray-500">Or check browser console for more details</p>
-        </div>
-      </div>
-    )
-  }
+
+  // Load this video's checkpoint questions (server never sends correct answers)
+  useEffect(() => {
+    checkpointsRef.current = []
+
+    const fetchQuestions = async () => {
+      try {
+        const res = await fetch(`/api/videos/${videoId}/questions`)
+        if (!res.ok) return
+        const data = await res.json()
+        checkpointsRef.current = (data.questions || []).map((q) => ({ ...q, answered: false }))
+      } catch {
+        // No checkpoints if the request fails - video still plays normally
+      }
+    }
+
+    if (videoId) fetchQuestions()
+  }, [videoId])
 
   useEffect(() => {
     const moveWatermark = () => {
@@ -85,7 +136,7 @@ export default function VideoPlayer({ videoId, courseId, videoTitle, userName, u
     }
 
     const interval = setInterval(moveWatermark, Math.random() * 5000 + 5000)
-    
+
     return () => clearInterval(interval)
   }, [])
 
@@ -105,15 +156,10 @@ export default function VideoPlayer({ videoId, courseId, videoTitle, userName, u
             hasCompletedVideoRef.current = true
             markVideoComplete(courseId, videoId)
           }
-          console.log("[v0] Existing progress loaded:", {
-            completed: data.progress.completed,
-            videoId,
-          })
         } else {
           existingProgressRef.current = null
         }
       } catch (err) {
-        console.error("[v0] Error fetching progress:", err)
         existingProgressRef.current = null
       }
     }
@@ -121,10 +167,10 @@ export default function VideoPlayer({ videoId, courseId, videoTitle, userName, u
     fetchProgress()
   }, [videoId, courseId, markVideoComplete])
 
+  // Verify access and get the YouTube video ID for this lesson
   useEffect(() => {
-    const fetchToken = async () => {
+    const fetchVideoSource = async () => {
       try {
-        console.log("[v0] Fetching video token for:", { videoId, courseId })
         const res = await fetch("/api/stream/generate-token", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -134,30 +180,17 @@ export default function VideoPlayer({ videoId, courseId, videoTitle, userName, u
         const data = await res.json()
 
         if (!res.ok) {
-          console.error("[v0] Token generation failed:", { 
-            status: res.status, 
+          console.error("[v0] Video source request failed:", {
+            status: res.status,
             message: data.message,
-            videoId,
-            courseId 
           })
-
-          if (data.message?.includes('not ready')) {
-            setError(
-              'Video not uploaded to Cloudflare Stream yet. Please contact the instructor to re-upload this video.'
-            )
-          } else {
-            setError(data.message || res.statusText)
-          }
+          setError(data.message || res.statusText)
           throw new Error(data.message)
         }
 
-        console.log("[v0] Token generated successfully")
-        setEmbedUrl(data.token || data.embedUrl)
-        // Reset session tracking when new video loads
-        sessionStartTimeRef.current = 0
+        setYoutubeVideoId(data.youtubeVideoId)
         maxWatchedTimeRef.current = 0
       } catch (err) {
-        console.error("[v0] Error in fetchToken:", err.message)
         if (!error) setError(err.message)
       } finally {
         setLoading(false)
@@ -165,23 +198,20 @@ export default function VideoPlayer({ videoId, courseId, videoTitle, userName, u
     }
 
     if (videoId && courseId) {
-      fetchToken()
+      fetchVideoSource()
     } else {
-      console.error("[v0] Missing videoId or courseId:", { videoId, courseId })
       setError("Missing video or course ID")
       setLoading(false)
     }
   }, [videoId, courseId, error])
 
   // Define handleVideoCompletion before useEffect
-  const handleVideoCompletion = useCallback(async (watchedTime, videoDuration) => {
+  const handleVideoCompletion = useCallback(async (watchedTime, totalDuration) => {
     if (hasCompletedVideoRef.current || isUpdatingProgressRef.current) return
 
     hasCompletedVideoRef.current = true
     isUpdatingProgressRef.current = true
     markVideoComplete(courseId, videoId)
-
-    console.log("[v0] 🎉 Video completed! Total watched:", watchedTime.toFixed(1), "seconds out of", videoDuration.toFixed(1))
 
     try {
       const res = await fetch("/api/progress/update", {
@@ -192,22 +222,20 @@ export default function VideoPlayer({ videoId, courseId, videoTitle, userName, u
           courseId,
           completed: true,
           watchedSeconds: Math.floor(watchedTime),
-          totalSeconds: Math.floor(videoDuration),
+          totalSeconds: Math.floor(totalDuration),
         }),
       })
 
       const data = await res.json()
-      
+
       if (res.ok) {
         // Update existing progress ref
         existingProgressRef.current = data.progress
-        
+
         if (data.creditsAwarded > 0) {
-          console.log("[v0] 🎉 Earned", data.creditsAwarded, "credits! Total:", data.totalCredits)
-          // Use a subtle notification instead of alert
           if (typeof window !== 'undefined' && window.dispatchEvent) {
-            window.dispatchEvent(new CustomEvent('videoCompleted', { 
-              detail: { credits: data.creditsAwarded, total: data.totalCredits } 
+            window.dispatchEvent(new CustomEvent('videoCompleted', {
+              detail: { credits: data.creditsAwarded, total: data.totalCredits }
             }))
           }
         }
@@ -220,171 +248,301 @@ export default function VideoPlayer({ videoId, courseId, videoTitle, userName, u
     }
   }, [videoId, courseId, markVideoComplete])
 
+  // Poll playback time while the video is playing (the IFrame API has no timeupdate event)
+  const startProgressPolling = useCallback(() => {
+    if (pollIntervalRef.current) return
+
+    pollIntervalRef.current = setInterval(() => {
+      const player = ytPlayerRef.current
+      if (!player || typeof player.getCurrentTime !== "function") return
+
+      const time = player.getCurrentTime()
+      const total = player.getDuration()
+
+      if (!(time >= 0) || !(total > 0)) return
+
+      // Fire a checkpoint question when playback crosses its trigger time.
+      // Skipped for videos the student already completed earlier.
+      if (!activeCheckpointRef.current && !hasCompletedVideoRef.current) {
+        const list = checkpointsRef.current
+        if (list.length > 0) {
+          const n = list.length
+          const due = list.find((q, idx) => {
+            if (q.answered) return false
+            let trigger =
+              q.triggerTime !== null && q.triggerTime !== undefined
+                ? q.triggerTime
+                : Math.floor((total * (idx + 1)) / (n + 1)) // auto: spread evenly
+            // A time past the end of the video would never fire - pull it
+            // back so the question shows near the end instead
+            trigger = Math.min(trigger, Math.max(1, Math.floor(total) - 3))
+            return time >= trigger
+          })
+
+          if (due) {
+            activeCheckpointRef.current = due
+            setActiveCheckpoint(due)
+            setCheckpointWrong(false)
+            player.pauseVideo()
+            return
+          }
+        }
+      }
+
+      // Keep the custom seek bar in sync (unless the user is dragging it)
+      if (!isSeekingRef.current) {
+        setCurrentTime(time)
+      }
+      setVideoDuration(total)
+
+      if (time > maxWatchedTimeRef.current) {
+        maxWatchedTimeRef.current = time
+      }
+
+      // Throttle store updates to prevent excessive re-renders
+      if (Math.floor(time) % 5 === 0) {
+        setPlaybackTime(time)
+      }
+
+      const totalWatchedTime = maxWatchedTimeRef.current
+      const timeFloor = Math.floor(time)
+
+      // Periodically save progress (every 30 seconds) to prevent loss
+      if (
+        !hasCompletedVideoRef.current &&
+        timeFloor > 0 &&
+        timeFloor % 30 === 0 &&
+        timeFloor !== lastProgressSaveRef.current
+      ) {
+        lastProgressSaveRef.current = timeFloor
+        fetch("/api/progress/update", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            videoId,
+            courseId,
+            completed: false, // Not completed yet, just saving progress
+            watchedSeconds: Math.floor(totalWatchedTime),
+            totalSeconds: Math.floor(total),
+          }),
+        }).catch(err => console.error("[v0] Error saving progress:", err))
+      }
+
+      // Check for completion based on cumulative watch time (90% threshold)
+      if (!hasCompletedVideoRef.current) {
+        const progressPercentage = (totalWatchedTime / total) * 100
+        if (progressPercentage >= 90) {
+          handleVideoCompletion(totalWatchedTime, total)
+        }
+      }
+    }, 1000)
+  }, [videoId, courseId, setPlaybackTime, handleVideoCompletion])
+
+  const stopProgressPolling = useCallback(() => {
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current)
+      pollIntervalRef.current = null
+    }
+  }, [])
+
+  // Show the masking bars, then fade them out once YouTube's overlays have faded
+  const showMaskTemporarily = useCallback(() => {
+    setMaskVisible(true)
+    if (maskTimeoutRef.current) clearTimeout(maskTimeoutRef.current)
+    maskTimeoutRef.current = setTimeout(() => setMaskVisible(false), 5000)
+  }, [])
+
   useEffect(() => {
-    if (!embedUrl || !playerContainerRef.current) return
-
-    // Prevent re-initialization if iframe already exists for this video
-    const existingIframe = playerContainerRef.current.querySelector('iframe')
-    if (existingIframe && existingIframe.src.includes(embedUrl)) {
-      console.log("[v0] Iframe already exists for this video, skipping re-initialization")
-      return
+    return () => {
+      if (maskTimeoutRef.current) clearTimeout(maskTimeoutRef.current)
     }
+  }, [])
 
-    console.log("[v0] Initializing Stream Player with token:", embedUrl.substring(0, 20) + "...")
+  useEffect(() => {
+    if (!youtubeVideoId || !playerContainerRef.current) return
 
-    // Clean up previous player if exists
-    if (streamPlayerRef.current) {
-      try {
-        streamPlayerRef.current.removeEventListener('loadedmetadata', () => {})
-        streamPlayerRef.current.removeEventListener('timeupdate', () => {})
-        streamPlayerRef.current.removeEventListener('error', () => {})
-      } catch (e) {
-        // Ignore cleanup errors
-      }
-      streamPlayerRef.current = null
-    }
+    let cancelled = false
 
-    // Create iframe for Stream Player
-    const iframe = document.createElement('iframe')
-    iframe.src = `https://customer-${accountId}.cloudflarestream.com/${embedUrl}/iframe`
-    iframe.style.border = 'none'
-    iframe.style.position = 'absolute'
-    iframe.style.top = '0'
-    iframe.style.left = '0'
-    iframe.style.width = '100%'
-    iframe.style.height = '100%'
-    iframe.allow = 'accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture;'
-    iframe.allowFullscreen = true
-    
-    // Clear container and add iframe
-    playerContainerRef.current.innerHTML = ''
-    playerContainerRef.current.appendChild(iframe)
+    // The YT.Player replaces this div with the iframe
+    const mountNode = document.createElement("div")
+    playerContainerRef.current.innerHTML = ""
+    playerContainerRef.current.appendChild(mountNode)
 
-    // Check if SDK is already loaded
-    const isSDKLoaded = typeof window !== 'undefined' && window.Stream
-    
-    const initializePlayer = () => {
-      if (!window.Stream || !iframe) return
-      
-      console.log("[v0] Stream Player SDK loaded")
-      
-      // Initialize Stream Player SDK with iframe
-      streamPlayerRef.current = window.Stream(iframe)
-      
-      // Listen to player events
-      streamPlayerRef.current.addEventListener('loadedmetadata', () => {
-        if (!streamPlayerRef.current) return
-        const videoDuration = streamPlayerRef.current.duration
-        console.log("[v0] Video duration:", videoDuration)
-        setDurationState(videoDuration)
-        setDuration(videoDuration)
+    loadYouTubeApi()
+      .then((YT) => {
+        if (cancelled) return
+
+        ytPlayerRef.current = new YT.Player(mountNode, {
+          videoId: youtubeVideoId,
+          width: "100%",
+          height: "100%",
+          host: "https://www.youtube-nocookie.com",
+          playerVars: {
+            controls: 0,         // Hide YouTube's own controls - we render our own
+            disablekb: 1,        // Disable YouTube keyboard shortcuts
+            fs: 0,               // Disable native fullscreen (we fullscreen the wrapper)
+            rel: 0,
+            modestbranding: 1,
+            playsinline: 1,
+            iv_load_policy: 3,   // Hide video annotations
+            origin: window.location.origin,
+          },
+          events: {
+            onReady: (event) => {
+              const total = event.target.getDuration()
+              if (total > 0) {
+                setVideoDuration(total)
+                setDuration(total)
+              }
+              setPlayerReady(true)
+            },
+            onStateChange: (event) => {
+              if (event.data === YT.PlayerState.PLAYING) {
+                setIsPlaying(true)
+                setHasEnded(false)
+                showMaskTemporarily()
+                const total = event.target.getDuration()
+                if (total > 0) {
+                  setVideoDuration(total)
+                  setDuration(total)
+                }
+                startProgressPolling()
+              } else if (event.data === YT.PlayerState.PAUSED) {
+                setIsPlaying(false)
+                stopProgressPolling()
+              } else if (event.data === YT.PlayerState.ENDED) {
+                setIsPlaying(false)
+                setHasEnded(true)
+                stopProgressPolling()
+
+                // Video watched to the very end counts as complete regardless of polling
+                if (!hasCompletedVideoRef.current) {
+                  const total = event.target.getDuration()
+                  if (total > 0) {
+                    handleVideoCompletion(Math.max(maxWatchedTimeRef.current, total), total)
+                  }
+                }
+              }
+            },
+            onError: (event) => {
+              console.error("[v0] YouTube player error code:", event.data)
+              // 100/101/150 = video not found or embedding disabled
+              if (event.data === 101 || event.data === 150) {
+                setError("This video cannot be embedded. Ask the instructor to allow embedding in YouTube Studio.")
+              } else if (event.data === 100) {
+                setError("Video not found. It may have been deleted or set to Private on YouTube.")
+              }
+            },
+          },
+        })
       })
-
-      streamPlayerRef.current.addEventListener('timeupdate', () => {
-        if (!streamPlayerRef.current) return
-        const currentTime = streamPlayerRef.current.currentTime
-        const videoDuration = streamPlayerRef.current.duration
-        
-        // Only update state if values are valid
-        if (currentTime >= 0 && videoDuration > 0) {
-          setPlaybackTimeState(currentTime)
-          // Track maximum watched time in this session
-          if (currentTime > maxWatchedTimeRef.current) {
-            maxWatchedTimeRef.current = currentTime
-          }
-          
-          // Throttle store updates to prevent excessive re-renders
-          if (Math.floor(currentTime) % 5 === 0 || currentTime === 0) {
-            setPlaybackTime(currentTime)
-          }
-          
-          // Throttle progress logging (every 10 seconds)
-          const currentTimeFloor = Math.floor(currentTime)
-          if (currentTimeFloor !== lastProgressUpdateRef.current && currentTimeFloor % 10 === 0 && currentTime > 0) {
-            lastProgressUpdateRef.current = currentTimeFloor
-            console.log("[v0] Progress:", {
-              current: currentTimeFloor,
-              total: Math.floor(videoDuration),
-              percentage: ((currentTime / videoDuration) * 100).toFixed(1) + "%"
-            })
-          }
-
-          // Check for completion based on cumulative watch time (90% threshold)
-          if (!hasCompletedVideoRef.current && videoDuration > 0) {
-            // Use the maximum watched time reached in this session
-            // This handles the case where user watches part, leaves, and comes back
-            const totalWatchedTime = maxWatchedTimeRef.current
-            const progressPercentage = (totalWatchedTime / videoDuration) * 100
-            
-            // Also periodically save progress (every 30 seconds) to prevent loss
-            const currentTimeFloor = Math.floor(currentTime)
-            if (currentTimeFloor > 0 && currentTimeFloor % 30 === 0 && currentTimeFloor !== lastProgressUpdateRef.current) {
-              // Save progress in background (non-blocking)
-              fetch("/api/progress/update", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  videoId,
-                  courseId,
-                  completed: false, // Not completed yet, just saving progress
-                  watchedSeconds: Math.floor(totalWatchedTime),
-                  totalSeconds: Math.floor(videoDuration),
-                }),
-              }).catch(err => console.error("[v0] Error saving progress:", err))
-            }
-            
-            if (progressPercentage >= 90) {
-              console.log("[v0] 🎉 Reached 90% completion! (Watched:", totalWatchedTime.toFixed(1), "seconds out of", videoDuration.toFixed(1), ")")
-              handleVideoCompletion(totalWatchedTime, videoDuration)
-            }
-          }
+      .catch((err) => {
+        if (!cancelled) {
+          console.error("[v0] Failed to load YouTube API:", err)
+          setError("Failed to load video player")
         }
       })
-
-      streamPlayerRef.current.addEventListener('error', (e) => {
-        console.error("[v0] Player error:", e)
-      })
-    }
-
-    if (isSDKLoaded) {
-      // SDK already loaded, initialize immediately
-      initializePlayer()
-    } else {
-      // Load Stream Player SDK to communicate with iframe
-      const script = document.createElement('script')
-      script.src = 'https://embed.cloudflarestream.com/embed/sdk.latest.js'
-      script.async = true
-      
-      script.onload = initializePlayer
-      
-      document.body.appendChild(script)
-
-      return () => {
-        if (script.parentNode) {
-          document.body.removeChild(script)
-        }
-      }
-    }
 
     return () => {
-      // Cleanup on unmount or video change
-      if (streamPlayerRef.current) {
+      cancelled = true
+      stopProgressPolling()
+      if (ytPlayerRef.current && typeof ytPlayerRef.current.destroy === "function") {
         try {
-          streamPlayerRef.current.removeEventListener('loadedmetadata', () => {})
-          streamPlayerRef.current.removeEventListener('timeupdate', () => {})
-          streamPlayerRef.current.removeEventListener('error', () => {})
+          ytPlayerRef.current.destroy()
         } catch (e) {
           // Ignore cleanup errors
         }
-        streamPlayerRef.current = null
       }
-      // Clear any pending timeouts
-      if (progressUpdateTimeoutRef.current) {
-        clearTimeout(progressUpdateTimeoutRef.current)
-        progressUpdateTimeoutRef.current = null
-      }
+      ytPlayerRef.current = null
     }
-  }, [embedUrl, accountId, handleVideoCompletion])
+  }, [youtubeVideoId, setDuration, startProgressPolling, stopProgressPolling, handleVideoCompletion, showMaskTemporarily])
+
+  // Answer a checkpoint question - popup only closes on a correct answer
+  const handleCheckpointAnswer = useCallback(async (optionIndex) => {
+    const q = activeCheckpointRef.current
+    if (!q || checkpointSubmitting) return
+
+    setCheckpointSubmitting(true)
+    setCheckpointWrong(false)
+
+    try {
+      const res = await fetch(`/api/videos/${videoId}/questions/answer`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ questionId: q.id, answer: optionIndex }),
+      })
+      const data = await res.json()
+
+      if (res.ok && data.correct) {
+        q.answered = true
+        activeCheckpointRef.current = null
+        setActiveCheckpoint(null)
+        ytPlayerRef.current?.playVideo?.()
+      } else {
+        setCheckpointWrong(true)
+      }
+    } catch {
+      setCheckpointWrong(true)
+    } finally {
+      setCheckpointSubmitting(false)
+    }
+  }, [videoId, checkpointSubmitting])
+
+  const togglePlay = useCallback(() => {
+    if (activeCheckpointRef.current) return // Must answer the question first
+    const player = ytPlayerRef.current
+    if (!player || !playerReady) return
+    if (hasEnded) {
+      player.seekTo(0, true)
+      player.playVideo()
+      setHasEnded(false)
+      return
+    }
+    if (isPlaying) {
+      player.pauseVideo()
+    } else {
+      player.playVideo()
+    }
+  }, [isPlaying, hasEnded, playerReady])
+
+  const toggleMute = useCallback(() => {
+    const player = ytPlayerRef.current
+    if (!player || !playerReady) return
+    if (isMuted) {
+      player.unMute()
+      setIsMuted(false)
+    } else {
+      player.mute()
+      setIsMuted(true)
+    }
+  }, [isMuted, playerReady])
+
+  const handleSeek = useCallback((e) => {
+    if (activeCheckpointRef.current) return // Must answer the question first
+    const value = Number(e.target.value)
+    setCurrentTime(value)
+    const player = ytPlayerRef.current
+    if (player && playerReady) {
+      player.seekTo(value, true)
+      showMaskTemporarily()
+    }
+  }, [playerReady, showMaskTemporarily])
+
+  const toggleFullscreen = useCallback(() => {
+    const el = wrapperRef.current
+    if (!el) return
+    try {
+      if (document.fullscreenElement) {
+        document.exitFullscreen()
+      } else if (el.requestFullscreen) {
+        el.requestFullscreen()
+      } else if (el.webkitRequestFullscreen) {
+        el.webkitRequestFullscreen()
+      }
+    } catch (e) {
+      // Fullscreen not supported - ignore
+    }
+  }, [])
 
   if (loading) {
     return (
@@ -409,7 +567,7 @@ export default function VideoPlayer({ videoId, courseId, videoTitle, userName, u
     )
   }
 
-  if (!embedUrl) {
+  if (!youtubeVideoId) {
     return (
       <div className="w-full bg-black rounded-lg flex items-center justify-center" style={{ aspectRatio: "16/9" }}>
         <div className="text-white text-center">
@@ -421,13 +579,94 @@ export default function VideoPlayer({ videoId, courseId, videoTitle, userName, u
   }
 
   return (
-    <div className="w-full rounded-lg overflow-hidden shadow-lg relative">
+    <div
+      ref={wrapperRef}
+      className="w-full rounded-lg overflow-hidden shadow-lg relative bg-black flex flex-col"
+      onContextMenu={(e) => e.preventDefault()}
+    >
       <div className="relative w-full" style={{ aspectRatio: "16/9" }}>
-        <div 
+        <div
           ref={playerContainerRef}
-          className="w-full h-full absolute inset-0 bg-black"
+          className="w-full h-full absolute inset-0 bg-black [&_iframe]:absolute [&_iframe]:inset-0 [&_iframe]:w-full [&_iframe]:h-full [&_iframe]:border-0"
         />
-        
+
+        {/* Click shield: blocks ALL direct interaction with the YouTube iframe
+            (no title link, no "Watch on YouTube", no right-click menu).
+            Clicking it toggles play/pause through the API instead. */}
+        <div
+          className="absolute inset-0 z-20 cursor-pointer"
+          onClick={togglePlay}
+        />
+
+        {/* Temporary letterbox masks: cover YouTube's title (top) and
+            logo/link icons (bottom) while YouTube displays them, then fade out */}
+        <div
+          className={`absolute top-0 inset-x-0 h-[18%] z-20 bg-black pointer-events-none transition-opacity duration-700 ${maskVisible ? "opacity-100" : "opacity-0"}`}
+        />
+        <div
+          className={`absolute bottom-0 inset-x-0 h-[16%] z-20 bg-black pointer-events-none transition-opacity duration-700 ${maskVisible ? "opacity-100" : "opacity-0"}`}
+        />
+
+        {/* Checkpoint question popup: pauses the lesson and stays until the
+            student answers correctly */}
+        {activeCheckpoint && (
+          <div className="absolute inset-0 z-[35] bg-black/95 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
+            <div className="max-w-md w-full">
+              <p className="text-amber-400 text-xs font-bold uppercase tracking-wide mb-3">
+                📝 Quick check — answer correctly to continue
+              </p>
+              <p className="text-white font-semibold text-sm sm:text-base mb-4">
+                {activeCheckpoint.text}
+              </p>
+              <div className="space-y-2">
+                {activeCheckpoint.options.map((option, i) => (
+                  <button
+                    key={i}
+                    disabled={checkpointSubmitting}
+                    onClick={() => handleCheckpointAnswer(i)}
+                    className="w-full text-left px-4 py-3 rounded-xl border border-white/20 bg-white/5 hover:bg-white/15 hover:border-white/40 text-white text-sm sm:text-base transition disabled:opacity-50"
+                  >
+                    {option}
+                  </button>
+                ))}
+              </div>
+              {checkpointWrong && (
+                <p className="text-red-400 text-sm mt-3 font-semibold">
+                  ❌ Not correct — try again!
+                </p>
+              )}
+              {checkpointSubmitting && (
+                <p className="text-white/60 text-xs mt-3">Checking...</p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Opaque cover while paused / not started / ended:
+            fully hides YouTube's pause screen, related videos and links */}
+        {(!isPlaying || hasEnded) && !activeCheckpoint && (
+          <div
+            className="absolute inset-0 z-30 bg-black/80 backdrop-blur-sm flex items-center justify-center cursor-pointer"
+            onClick={togglePlay}
+          >
+            <div className="text-center">
+              <div className="w-16 h-16 sm:w-20 sm:h-20 bg-white/10 hover:bg-white/20 border border-white/30 rounded-full flex items-center justify-center mx-auto mb-3 transition">
+                {hasEnded ? (
+                  <RotateCcw className="w-7 h-7 sm:w-9 sm:h-9 text-white" />
+                ) : (
+                  <Play className="w-7 h-7 sm:w-9 sm:h-9 text-white ml-1" />
+                )}
+              </div>
+              {videoTitle && (
+                <p className="text-white/90 text-sm sm:text-base font-medium px-4 line-clamp-2">{videoTitle}</p>
+              )}
+              <p className="text-white/50 text-xs mt-1">
+                {hasEnded ? "Watch again" : playerReady ? "Click to play" : "Loading player..."}
+              </p>
+            </div>
+          </div>
+        )}
+
         {userName && userId && (
           <div className="absolute inset-0 pointer-events-none z-50">
             <div
@@ -444,6 +683,54 @@ export default function VideoPlayer({ videoId, courseId, videoTitle, userName, u
             </div>
           </div>
         )}
+      </div>
+
+      {/* Custom controls bar */}
+      <div className="relative z-40 flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2 sm:py-2.5 bg-zinc-900 select-none">
+        <button
+          onClick={togglePlay}
+          className="text-white hover:text-white/80 transition flex-shrink-0"
+          aria-label={isPlaying ? "Pause" : "Play"}
+        >
+          {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
+        </button>
+
+        <span className="text-white/80 text-xs font-mono flex-shrink-0">
+          {formatTime(currentTime)}
+        </span>
+
+        <input
+          type="range"
+          min={0}
+          max={videoDuration || 0}
+          step={1}
+          value={Math.min(currentTime, videoDuration || 0)}
+          onChange={handleSeek}
+          onPointerDown={() => { isSeekingRef.current = true }}
+          onPointerUp={() => { isSeekingRef.current = false }}
+          className="flex-1 h-1.5 accent-red-600 cursor-pointer"
+          aria-label="Seek"
+        />
+
+        <span className="text-white/80 text-xs font-mono flex-shrink-0">
+          {formatTime(videoDuration)}
+        </span>
+
+        <button
+          onClick={toggleMute}
+          className="text-white hover:text-white/80 transition flex-shrink-0"
+          aria-label={isMuted ? "Unmute" : "Mute"}
+        >
+          {isMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
+        </button>
+
+        <button
+          onClick={toggleFullscreen}
+          className="text-white hover:text-white/80 transition flex-shrink-0"
+          aria-label="Fullscreen"
+        >
+          <Maximize className="w-5 h-5" />
+        </button>
       </div>
     </div>
   )

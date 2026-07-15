@@ -7,7 +7,7 @@ import { useQuery } from "@tanstack/react-query"
 import { useToast } from "@/hooks/use-toast"
 import Link from "next/link"
 import LoadingBubbles from "@/components/loadingBubbles"
-import { Upload, BookOpen, ArrowRight, Video, CheckCircle, Cloud, ChevronDown } from "lucide-react"
+import { Upload, BookOpen, ArrowRight, Video, CheckCircle, Youtube, ChevronDown } from "lucide-react"
 
 // Memoized Info Card Component
 const InfoCard = memo(({ icon: Icon, title, description, bgColor, iconColor }) => (
@@ -83,23 +83,23 @@ export default function UploadVideos() {
   const infoCards = useMemo(
     () => [
       {
-        icon: Cloud,
-        title: "Cloudflare Stream",
-        description: "Fast, reliable video delivery worldwide",
-        bgColor: "bg-primary/10",
-        iconColor: "text-primary",
+        icon: Youtube,
+        title: "Hosted on YouTube",
+        description: "Fast, free video delivery worldwide - no storage limits",
+        bgColor: "bg-red-500/10",
+        iconColor: "text-red-600 dark:text-red-400",
       },
       {
         icon: Video,
         title: "Easy Management",
-        description: "Upload, organize, and edit your videos",
+        description: "Upload as Unlisted on YouTube, then paste the link here",
         bgColor: "bg-secondary/10",
         iconColor: "text-secondary",
       },
       {
         icon: CheckCircle,
         title: "High Quality",
-        description: "Automatic optimization and encoding",
+        description: "Automatic optimization and encoding by YouTube",
         bgColor: "bg-emerald-500/10",
         iconColor: "text-emerald-600 dark:text-emerald-400",
       },
@@ -123,8 +123,8 @@ export default function UploadVideos() {
             <div className="flex-1 min-w-0">
               <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-foreground">Upload Videos</h1>
               <p className="text-muted-foreground flex items-center gap-2 mt-1 text-sm sm:text-base">
-                <Cloud className="w-4 h-4 flex-shrink-0" />
-                <span>Powered by Cloudflare Stream for optimized delivery</span>
+                <Youtube className="w-4 h-4 flex-shrink-0" />
+                <span>Powered by YouTube (unlisted videos) for optimized delivery</span>
               </p>
             </div>
           </div>

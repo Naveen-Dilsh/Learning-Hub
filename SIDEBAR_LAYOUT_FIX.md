@@ -344,3 +344,48 @@ grid-cols-3
 **Issue Status:** ✅ **Resolved**  
 **Testing Status:** ✅ **Verified**
 
+
+
+
+
+
+
+✅ What's actually good
+🔐 Download route checks ownership properly (students can only get their own certificate)
+🚫 Duplicate protection — one certificate per student per course (database rule)
+🩹 Self-healing — if the PDF file is missing, it regenerates automatically on download
+🎨 The PDF design code is decent (auto-shrinks long names, clean layout)
+🔴 Serious drawbacks
+1. 🏃 Students can "earn" a certificate in 2 minutes without watching anything.
+A video counts as "completed" at 90% — but the progress tracking uses the furthest position reached, not real watched time. So a student can just drag the seek bar to the end of each video → 90% reached → video complete → certificate issued. The certificate is meaningless as proof of learning.
+Fix idea: count real watched seconds, or block seeking ahead of the furthest watched point.
+
+2. 💸 Unpaid students can watch videos AND get certificates.
+The code only checks that an enrollment exists — not that it's APPROVED. A student who submits a manual enrollment (even with a fake bank receipt 🧾) is instantly PENDING… and PENDING passes the check! They can watch the full course and get a certificate before you ever approve them. This affects video access too, not just certificates.
+
+3. 📧 The certificate email link is broken by design.
+The code creates a download link valid for 1 year — but R2/S3 signed links have a hard 7-day maximum. So the emailed link either dies after 7 days or never works, and in some cases the email silently never sends at all.
+
+4. 🇱🇰 Sinhala or Tamil names will crash the PDF.
+The PDF uses built-in fonts (Times/Helvetica) that only support Latin letters. A student named "නවීන්" → PDF generation throws an error. For a Sri Lankan platform, this is a real risk. Fix: embed a Unicode font (e.g., Noto Sans Sinhala) or transliterate.
+
+🟠 Medium issues
+5. 🔗 Old-style certificate rows redirect to dead links. If certificateUrl holds a full URL (old records), the code redirects to it without checking if it expired — the "regenerate" code below it can never run (unreachable). Students get an ugly R2 error page.
+
+6. 🕵️ The PDF says "Verify this certificate at your organization's website" — but there is no verify page! Anyone can Photoshop a certificate and nobody can check it. A public page like /verify/CERT-ID showing name + course + date would make certificates actually trustworthy. ⭐ This one would add real value.
+
+7. 🖱️ Double-click = ugly error. Two rapid completion calls → the second crashes with a raw 500 instead of returning the existing certificate gracefully.
+
+🟡 Small stuff
+📱 Certificate creation only triggers from the watch page in the browser — if that request fails (network blip), the certificate isn't created until they revisit
+🧹 Half of the download route file (~200 lines) is commented-out dead code — should be deleted
+🔒 The certificates list API blocks ADMINs entirely (only STUDENT role can call it) — probably unintended
+🎯 My priority order if you want fixes
+#2 (unpaid access) — this is costing you money 💰
+#1 (seek-to-cheat) — this makes certificates worthless
+#3 (broken email link) — students notice this
+#6 (verify page) — makes your certificates genuinely credible
+Want me to fix them? I'd start with #2 — it's a small change (check status === "APPROVED") in two files.
+
+Grammar: "Can you fully review the certificate process and tell me its drawbacks?"
+Natural way to say it: "Could you do a full review of the certificate process and point out any weaknesses?"

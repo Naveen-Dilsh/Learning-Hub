@@ -32,7 +32,9 @@ const getCachedCourse = unstable_cache(
             duration: true,
             isFree: true,
             order: true,
-            cloudflareStreamId: true,
+            // youtubeVideoId deliberately NOT selected: this endpoint is public
+            // and the unlisted YouTube ID must only be served to enrolled users
+            // via /api/stream/generate-token
           },
           orderBy: { order: "asc" }
         },

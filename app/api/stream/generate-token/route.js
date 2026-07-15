@@ -1,9 +1,11 @@
 import { prisma } from "@/lib/db"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
-import { generateSignedToken, cleanCloudflareAccountId } from "@/lib/cloudflare-stream"
 import { NextResponse } from "next/server"
 
+// Verifies the student may watch this lesson and returns the YouTube video ID.
+// The ID is never rendered in the page HTML for non-enrolled users - this
+// endpoint is the only place it is exposed.
 export async function POST(request) {
   try {
     const session = await getServerSession(authOptions)
@@ -29,13 +31,13 @@ export async function POST(request) {
       return NextResponse.json({ message: "Video not found" }, { status: 404 })
     }
 
-    if (!video.cloudflareStreamId) {
-      console.error("[v0] Video missing cloudflareStreamId:", {
+    if (!video.youtubeVideoId) {
+      console.error("[v0] Video missing youtubeVideoId:", {
         videoId,
         title: video.title,
       })
       return NextResponse.json(
-        { message: "Video not ready for streaming. Please re-upload it." },
+        { message: "This video is not available yet. Please ask the instructor to re-add it with a YouTube link." },
         { status: 400 }
       )
     }
@@ -53,50 +55,19 @@ export async function POST(request) {
     const isInstructor = session.user.id === video.course.instructorId
     const isAdmin = session.user.role === "ADMIN"
     const isFreeVideo = video.isFree === true
+    // Only APPROVED enrollments can watch - PENDING (unpaid/unapproved),
+    // REJECTED and CANCELLED must not access paid content
+    const hasApprovedEnrollment = enrollment?.status === "APPROVED"
 
-    if (!enrollment && !isInstructor && !isAdmin && !isFreeVideo) {
-      return NextResponse.json({ message: "Not enrolled in this course" }, { status: 403 })
-    }
-
-    const apiToken = process.env.CLOUDFLARE_API_TOKEN?.trim()
-    const accountId = process.env.CLOUDFLARE_ACCOUNT_ID?.trim()
-    const publicAccountId = process.env.NEXT_PUBLIC_CLOUDFLARE_ACCOUNT_ID?.trim()
-    
-    const cleanId = cleanCloudflareAccountId(publicAccountId)
-    
-    console.log("[v0] Generating token for video:", {
-      videoId: video.cloudflareStreamId,
-      hasApiToken: !!apiToken,
-      hasAccountId: !!accountId,
-    })
-
-    let streamSrc
-    let token = null
-
-    if (apiToken && accountId) {
-      try {
-        token = await generateSignedToken(video.cloudflareStreamId, accountId, apiToken, 3600)
-        
-        console.log("[v0] Token received from Cloudflare:", {
-          tokenStart: token.substring(0, 20) + "...",
-          tokenEnd: "..." + token.substring(token.length - 20),
-          tokenLength: token.length
-        })
-        
-        streamSrc = token
-        
-        console.log("[v0] Using signed token for Stream Player SDK")
-      } catch (error) {
-        console.error("[v0] Failed to generate signed token:", error.message)
-        streamSrc = video.cloudflareStreamId
-      }
-    } else {
-      console.log("[v0] No API token configured - using public video ID")
-      streamSrc = video.cloudflareStreamId
+    if (!hasApprovedEnrollment && !isInstructor && !isAdmin && !isFreeVideo) {
+      const message = enrollment
+        ? "Your enrollment is not approved yet. Please wait for approval."
+        : "Not enrolled in this course"
+      return NextResponse.json({ message }, { status: 403 })
     }
 
     // Record video view
-    if (enrollment) {
+    if (hasApprovedEnrollment) {
       await prisma.videoProgress.upsert({
         where: {
           enrollmentId_videoId: {
@@ -116,13 +87,10 @@ export async function POST(request) {
     }
 
     return NextResponse.json({
-      token: streamSrc,
-      videoId: video.cloudflareStreamId,
-      embedUrl: `https://customer-${cleanId}.cloudflarestream.com/${streamSrc}/iframe`,
-      requireSignedURLs: !!token,
+      youtubeVideoId: video.youtubeVideoId,
     })
   } catch (error) {
-    console.error("[v0] Error generating token:", error)
+    console.error("[v0] Error fetching video source:", error)
     return NextResponse.json({ message: "Internal server error", error: error.message }, { status: 500 })
   }
 }

@@ -70,7 +70,8 @@ export default function Settings() {
     country: "Sri Lanka",
     createdAt: "",
   })
-  const [isEditing, setIsEditing] = useState(false)
+  // Which section is being edited: null | "profile" | "address"
+  const [editSection, setEditSection] = useState(null)
 
   const {
     data: profileData,
@@ -132,8 +133,8 @@ export default function Settings() {
     setFormData((prev) => ({ ...prev, image: imageUrl }))
   }, [])
 
-  const handleEdit = useCallback(() => {
-    setIsEditing(true)
+  const handleEdit = useCallback((section) => {
+    setEditSection(section)
   }, [])
 
   const handleCancel = useCallback(() => {
@@ -155,7 +156,7 @@ export default function Settings() {
         createdAt: profileData.createdAt || "",
       })
     }
-    setIsEditing(false)
+    setEditSection(null)
   }, [profileData])
 
   const updateProfileMutation = useMutation({
@@ -197,11 +198,11 @@ export default function Settings() {
       await queryClient.invalidateQueries({ queryKey: ["userProfile", session?.user?.id] })
       await queryClient.refetchQueries({ queryKey: ["userProfile", session?.user?.id] })
       
-      setIsEditing(false)
-      
+      setEditSection(null)
+
       toast({
         title: "Profile Updated",
-        description: "Your profile has been updated successfully.",
+        description: "Your changes have been saved successfully.",
       })
     },
     onError: (error) => {
@@ -298,9 +299,9 @@ export default function Settings() {
                 </h2>
                 <p className="text-sm text-muted-foreground text-center mb-4">{formData.email}</p>
                 
-                {!isEditing && (
+                {!editSection && (
                   <button
-                    onClick={handleEdit}
+                    onClick={() => handleEdit("profile")}
                     className="btn-primary inline-flex items-center gap-2 px-4 sm:px-6 py-2 sm:py-2.5 rounded-lg text-sm sm:text-base font-semibold"
                   >
                     <Edit2 className="w-4 h-4" />
@@ -366,7 +367,7 @@ export default function Settings() {
 
           {/* Main Content */}
           <div className="lg:col-span-2">
-            {!isEditing ? (
+            {!editSection ? (
               /* View Mode */
               <div className="space-y-4 sm:space-y-6">
                 {/* Personal Information */}
@@ -397,10 +398,19 @@ export default function Settings() {
 
                 {/* Delivery Address */}
                 <div className="bg-card rounded-xl border border-border p-4 sm:p-6">
-                  <h3 className="text-lg sm:text-xl font-bold text-foreground mb-4 sm:mb-6 flex items-center gap-2">
-                    <MapPin className="w-5 h-5 text-primary" />
-                    Delivery Address
-                  </h3>
+                  <div className="flex items-center justify-between mb-4 sm:mb-6">
+                    <h3 className="text-lg sm:text-xl font-bold text-foreground flex items-center gap-2">
+                      <MapPin className="w-5 h-5 text-primary" />
+                      Delivery Address
+                    </h3>
+                    <button
+                      onClick={() => handleEdit("address")}
+                      className="btn-secondary inline-flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-sm font-semibold"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                      {hasCompleteAddress ? "Edit Address" : "Add Address"}
+                    </button>
+                  </div>
                   {hasCompleteAddress ? (
                     <div className="space-y-2 sm:space-y-3">
                       <div className="flex items-start gap-3">
@@ -438,18 +448,25 @@ export default function Settings() {
                   ) : (
                     <div className="text-center py-6 sm:py-8">
                       <MapPin className="w-12 h-12 sm:w-16 sm:h-16 text-muted-foreground/30 mx-auto mb-3 sm:mb-4" />
-                      <p className="text-sm sm:text-base text-muted-foreground mb-4">
+                      <p className="text-sm sm:text-base text-muted-foreground mb-2">
                         No delivery address added yet
                       </p>
-                      <p className="text-xs sm:text-sm text-muted-foreground">
+                      <p className="text-xs sm:text-sm text-muted-foreground mb-4">
                         Add your address to receive course materials
                       </p>
+                      <button
+                        onClick={() => handleEdit("address")}
+                        className="btn-primary inline-flex items-center gap-2 px-4 sm:px-5 py-2 sm:py-2.5 rounded-lg text-sm font-semibold"
+                      >
+                        <MapPin className="w-4 h-4" />
+                        Add Address Now
+                      </button>
                     </div>
                   )}
                 </div>
               </div>
-            ) : (
-              /* Edit Mode */
+            ) : editSection === "profile" ? (
+              /* Edit Profile - picture and name only */
               <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
                 <div className="bg-card rounded-xl border border-border p-4 sm:p-6">
                   <div className="flex items-center justify-between mb-4 sm:mb-6">
@@ -497,6 +514,46 @@ export default function Settings() {
                       />
                     </div>
 
+                    <button
+                      type="submit"
+                      disabled={updateProfileMutation.isPending}
+                      className="btn-primary w-full inline-flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-semibold disabled:opacity-50"
+                    >
+                      {updateProfileMutation.isPending ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin"></div>
+                          Saving...
+                        </>
+                      ) : (
+                        <>
+                          <Save className="w-4 h-4" />
+                          Save Profile
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </form>
+            ) : (
+              /* Edit Address - phone and delivery address */
+              <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
+                <div className="bg-card rounded-xl border border-border p-4 sm:p-6">
+                  <div className="flex items-center justify-between mb-4 sm:mb-6">
+                    <h3 className="text-lg sm:text-xl font-bold text-foreground flex items-center gap-2">
+                      <MapPin className="w-5 h-5 text-primary" />
+                      {hasCompleteAddress ? "Edit Address" : "Add Address"}
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={handleCancel}
+                      className="btn-secondary inline-flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-sm font-semibold"
+                    >
+                      <X className="w-4 h-4" />
+                      Cancel
+                    </button>
+                  </div>
+
+                  <div className="space-y-4 sm:space-y-6">
                     <div>
                       <label className="block text-sm font-medium text-foreground mb-2">
                         Phone Number <span className="text-destructive">*</span>
@@ -517,7 +574,6 @@ export default function Settings() {
 
                     {/* Delivery Address Section */}
                     <div className="pt-4 border-t border-border">
-                      <h4 className="text-base sm:text-lg font-semibold text-foreground mb-2 sm:mb-3">Delivery Address</h4>
                       <p className="text-xs sm:text-sm text-muted-foreground mb-4">
                         This address will be used for course material deliveries.
                       </p>
@@ -624,7 +680,7 @@ export default function Settings() {
                       ) : (
                         <>
                           <Save className="w-4 h-4" />
-                          Save Changes
+                          Save Address
                         </>
                       )}
                     </button>

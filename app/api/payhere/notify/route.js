@@ -1,9 +1,14 @@
 import { prisma } from "@/lib/db"
 import { verifyPayHereNotification } from "@/lib/payhere"
+import { ONLINE_PAYMENTS_ENABLED, ONLINE_PAYMENTS_DISABLED_MESSAGE } from "@/lib/payment-config"
 import { NextResponse } from "next/server"
 
 export async function POST(request) {
   try {
+    if (!ONLINE_PAYMENTS_ENABLED) {
+      return NextResponse.json({ message: ONLINE_PAYMENTS_DISABLED_MESSAGE }, { status: 503 })
+    }
+
     const formData = await request.formData()
 
     const merchant_id = formData.get("merchant_id")

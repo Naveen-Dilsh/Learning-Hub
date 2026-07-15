@@ -15,10 +15,12 @@ import { useToast } from "@/hooks/use-toast"
 const CertificateModal = memo(({ isOpen, onClose, courseName, courseId }) => {
   const { toast } = useToast()
   const queryClient = useQueryClient()
+  const [quizRequired, setQuizRequired] = useState(false)
 
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden'
+      setQuizRequired(false)
       // Automatically generate certificate when modal opens
       const generateCertificate = async () => {
         try {
@@ -34,11 +36,14 @@ const CertificateModal = memo(({ isOpen, onClose, courseName, courseId }) => {
             queryClient.invalidateQueries({ queryKey: ["enrollments"] })
             queryClient.invalidateQueries({ queryKey: ["certificates"] })
             queryClient.invalidateQueries({ queryKey: ["course", courseId] })
-            
+
             toast({
               title: "🎉 Certificate Earned!",
               description: "Congratulations! Your certificate has been generated.",
             })
+          } else if (res.ok && data.quizRequired) {
+            // Videos done, but the final quiz still needs to be passed
+            setQuizRequired(true)
           }
         } catch (error) {
           console.error("Error generating certificate:", error)
@@ -60,6 +65,57 @@ const CertificateModal = memo(({ isOpen, onClose, courseName, courseId }) => {
   }, [isOpen, courseId, queryClient, toast])
 
   if (!isOpen) return null
+
+  // Quiz-required version of the modal
+  if (quizRequired) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-in fade-in duration-300">
+        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose}></div>
+
+        <div className="relative bg-card rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden animate-in zoom-in duration-300 border border-border">
+          <button
+            onClick={onClose}
+            className="absolute top-4 right-4 z-10 p-2 bg-card/80 hover:bg-card rounded-full transition-colors border border-border"
+          >
+            <X className="w-5 h-5 text-foreground" />
+          </button>
+
+          <div className="relative bg-gradient-to-br from-primary/10 via-secondary/10 to-primary/10 p-8 pt-12">
+            <div className="flex justify-center mb-6">
+              <div className="w-24 h-24 bg-gradient-to-br from-primary to-secondary rounded-full flex items-center justify-center shadow-lg">
+                <FileText className="w-12 h-12 text-white" />
+              </div>
+            </div>
+
+            <div className="text-center">
+              <h2 className="text-2xl font-bold text-foreground mb-2">One last step! 📝</h2>
+              <p className="text-base text-muted-foreground mb-4">
+                You've watched all the videos. Pass the final quiz to earn your certificate.
+              </p>
+              <p className="text-sm font-semibold text-primary">{courseName}</p>
+            </div>
+          </div>
+
+          <div className="p-6">
+            <div className="space-y-3">
+              <Link
+                href={`/student/browse-course/${courseId}/quiz`}
+                className="btn-primary w-full py-4 px-6 rounded-xl font-bold text-center block active:scale-[0.98]"
+              >
+                Take the Final Quiz
+              </Link>
+              <button
+                onClick={onClose}
+                className="bg-muted hover:bg-muted/80 text-foreground w-full py-4 px-6 rounded-xl font-bold text-center block transition active:scale-[0.98]"
+              >
+                Maybe Later
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-in fade-in duration-300">
