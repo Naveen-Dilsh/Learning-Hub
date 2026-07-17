@@ -85,9 +85,9 @@ export default function LeaderboardPage() {
 
   // Find current user's rank
   const currentUserRank = useMemo(() => {
-    if (!session?.user?.email) return null
-    return leaderboard.find((entry) => entry.email === session.user.email) || null
-  }, [leaderboard, session?.user?.email])
+    if (!session?.user?.id) return null
+    return leaderboard.find((entry) => entry.id === session.user.id) || null
+  }, [leaderboard, session?.user?.id])
 
   // Memoized top 3
   const topThree = useMemo(() => leaderboard.slice(0, 3), [leaderboard])
@@ -158,9 +158,6 @@ export default function LeaderboardPage() {
                     <p className="font-bold text-foreground mt-3 text-sm sm:text-base truncate w-full text-center">
                       {user.name || "Anonymous"}
                     </p>
-                    <p className="text-xs text-muted-foreground truncate w-full text-center mt-1">
-                      {user.email}
-                    </p>
                     <div className="mt-3 flex items-center gap-1">
                       <Star className="w-4 h-4 text-chart-5 fill-chart-5" />
                       <span className="font-bold text-foreground text-lg">{user.credits.toLocaleString()}</span>
@@ -202,7 +199,7 @@ export default function LeaderboardPage() {
                   <tr
                     key={user.id}
                     className={`hover:bg-muted/30 transition-colors ${
-                      user.email === session?.user?.email
+                      user.id === session?.user?.id
                         ? "bg-primary/5 border-l-4 border-l-primary"
                         : ""
                     }`}
@@ -221,13 +218,12 @@ export default function LeaderboardPage() {
                         <div className="min-w-0 flex-1">
                           <p className="font-medium text-foreground truncate">
                             {user.name || "Anonymous"}
-                            {user.email === session?.user?.email && (
+                            {user.id === session?.user?.id && (
                               <span className="ml-2 text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-semibold">
                                 You
                               </span>
                             )}
                           </p>
-                          <p className="text-xs sm:text-sm text-muted-foreground truncate">{user.email}</p>
                         </div>
                       </div>
                     </td>
@@ -254,7 +250,7 @@ export default function LeaderboardPage() {
                 <div
                   key={user.id}
                   className={`p-4 ${
-                    user.email === session?.user?.email
+                    user.id === session?.user?.id
                       ? "bg-primary/5 border-l-4 border-l-primary"
                       : ""
                   }`}
@@ -268,13 +264,12 @@ export default function LeaderboardPage() {
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-foreground truncate">
                         {user.name || "Anonymous"}
-                        {user.email === session?.user?.email && (
+                        {user.id === session?.user?.id && (
                           <span className="ml-2 text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-semibold">
                             You
                           </span>
                         )}
                       </p>
-                      <p className="text-xs text-muted-foreground truncate">{user.email}</p>
                     </div>
                   </div>
                   <div className="flex items-center justify-between pt-3 border-t border-border">

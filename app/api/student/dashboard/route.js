@@ -11,21 +11,40 @@ export async function GET(request) {
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
     }
 
-    // Get enrollments with progress
-    const enrollments = await prisma.enrollment.findMany({
-      where: { studentId: session.user.id },
-      include: {
-        course: {
-          include: {
-            instructor: { select: { name: true } },
-            _count: { select: { videos: true } },
+    // Run all dashboard queries in parallel
+    const [enrollments, allEnrollments, completedProgress] = await Promise.all([
+      // Recent enrollments with progress
+      prisma.enrollment.findMany({
+        where: { studentId: session.user.id },
+        include: {
+          course: {
+            include: {
+              instructor: { select: { name: true } },
+              _count: { select: { videos: true } },
+            },
           },
+          progress: true,
         },
-        progress: true,
-      },
-      orderBy: { enrolledAt: "desc" },
-      take: 5,
-    })
+        orderBy: { enrolledAt: "desc" },
+        take: 5,
+      }),
+      // Per-course totals for the stats
+      prisma.enrollment.findMany({
+        where: { studentId: session.user.id },
+        select: {
+          course: { select: { _count: { select: { videos: true } } } },
+          _count: { select: { progress: { where: { completed: true } } } },
+        },
+      }),
+      // Durations of completed videos for hours watched
+      prisma.videoProgress.findMany({
+        where: {
+          enrollment: { studentId: session.user.id },
+          completed: true,
+        },
+        select: { video: { select: { duration: true } } },
+      }),
+    ])
 
     // Calculate progress
     const enrollmentsWithProgress = enrollments.map((enrollment) => {
@@ -39,31 +58,17 @@ export async function GET(request) {
       }
     })
 
-    // Get stats
-    const allEnrollments = await prisma.enrollment.findMany({
-      where: { studentId: session.user.id },
-      include: {
-        course: { include: { _count: { select: { videos: true } } } },
-        progress: true,
-      },
-    })
+    const totalSecondsWatched = completedProgress.reduce(
+      (sum, p) => sum + (p.video?.duration || 0),
+      0,
+    )
 
     const stats = {
       enrolledCourses: allEnrollments.length,
-      hoursWatched: Math.round(
-        allEnrollments.reduce((total, e) => {
-          return (
-            total +
-            e.progress.reduce((sum, p) => {
-              return sum + (p.completed ? (p.course.videos.find((v) => v.id === p.videoId)?.duration || 0) / 3600 : 0)
-            }, 0)
-          )
-        }, 0),
-      ),
+      hoursWatched: Math.round(totalSecondsWatched / 3600),
       completedCourses: allEnrollments.filter((e) => {
         const totalVideos = e.course._count.videos
-        const watchedVideos = e.progress.filter((p) => p.completed).length
-        return totalVideos > 0 && watchedVideos === totalVideos
+        return totalVideos > 0 && e._count.progress === totalVideos
       }).length,
     }
 

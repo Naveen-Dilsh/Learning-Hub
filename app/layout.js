@@ -22,7 +22,7 @@ const sinhala = Maname({
 const shrikhand = Shrikhand({
   subsets: ["latin"],
   weight: ["400"],
-  variable: "--font-display",
+  variable: "--font-shrikhand",
   display: "swap",
   preload: true,
 })

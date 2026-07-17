@@ -114,13 +114,14 @@ export default function SignIn() {
           {/* GIF Section - Bottom aligned */}
           <div className="flex items-end justify-start pt-4">
             <div className="relative bg-muted-foreground dark:bg-transparent w-80 h-80 xl:w-96 xl:h-96 shadow-2xl dark:shadow-none rounded-2xl">
-              <Image
-                src="/images/signin-animation.gif"
-                alt="Learning animation"
-                fill
-                className="object-contain rounded-2xl"
-                unoptimized
-                priority={false}
+              <video
+                src="/images/signin-animation.webm"
+                autoPlay
+                loop
+                muted
+                playsInline
+                aria-label="Learning animation"
+                className="absolute inset-0 w-full h-full object-contain rounded-2xl"
               />
             </div>
           </div>

@@ -12,10 +12,21 @@ export async function middleware(req) {
 
   // Redirect to signin if accessing protected routes without auth
   if (!token) {
-    if (pathname.startsWith("/dashboard") || pathname.startsWith("/instructor") || pathname.startsWith("/student")) {
+    if (
+      pathname.startsWith("/dashboard") ||
+      pathname.startsWith("/instructor") ||
+      pathname.startsWith("/student") ||
+      pathname.startsWith("/admin")
+    ) {
       return NextResponse.redirect(new URL("/auth/signin", req.url))
     }
     return NextResponse.next()
+  }
+
+  // Only admins can access admin routes
+  if (pathname.startsWith("/admin") && token.role !== "ADMIN") {
+    const fallback = token.role === "INSTRUCTOR" ? "/instructor/dashboard" : "/student/dashboard"
+    return NextResponse.redirect(new URL(fallback, req.url))
   }
 
   // Redirect students trying to access instructor-only routes
@@ -37,5 +48,5 @@ export async function middleware(req) {
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/instructor/:path*", "/student/:path*", "/courses/:path*/watch"],
+  matcher: ["/dashboard/:path*", "/instructor/:path*", "/student/:path*", "/admin/:path*", "/courses/:path*/watch"],
 }

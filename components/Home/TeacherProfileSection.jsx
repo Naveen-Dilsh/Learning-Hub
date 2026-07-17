@@ -59,7 +59,7 @@ export default function TeacherProfileSection() {
                   {/* Image Container */}
                   <div className="relative z-10 aspect-square rounded-2xl overflow-hidden border-2 shadow-xl" style={{ borderColor: 'var(--hero-card-border)' }}>
                     <Image
-                      src="/images/1.png"
+                      src="/images/1.webp"
                       alt="Chemistry Teacher"
                       fill
                       sizes="(max-width: 768px) 350px, 400px"

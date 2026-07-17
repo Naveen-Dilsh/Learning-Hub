@@ -7,9 +7,9 @@ import { Dialog, DialogContent } from "@/components/ui/dialog"
 import Link from "next/link"
 
 const teacherImages = [
-  { src: "/images/2.png", alt: "Science Teacher 1" },
-  { src: "/images/3.png", alt: "Science Teacher 2" },
-  { src: "/images/4.png", alt: "Science Teacher 3" },
+  { src: "/images/2.webp", alt: "Science Teacher 1" },
+  { src: "/images/3.webp", alt: "Science Teacher 2" },
+  { src: "/images/4.webp", alt: "Science Teacher 3" },
 ]
 
 // Demo video URL - replace with your actual video URL

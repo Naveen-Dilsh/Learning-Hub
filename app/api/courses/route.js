@@ -54,6 +54,17 @@ export async function GET(request) {
     if (instructorId) where.instructorId = instructorId
     if (published !== null) where.published = published === "true"
 
+    // Only the instructor themselves (or an admin) can see unpublished courses
+    const session = await getServerSession(authOptions)
+    const canSeeUnpublished =
+      session &&
+      (session.user.role === "ADMIN" ||
+        (instructorId && session.user.id === instructorId))
+
+    if (!canSeeUnpublished) {
+      where.published = true
+    }
+
     // Use cache for published courses (public view)
     let courses
     if (published === "true" && !instructorId) {

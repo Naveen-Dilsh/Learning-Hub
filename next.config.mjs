@@ -40,7 +40,6 @@ const nextConfig = {
 
   // ✅ Enable compression and minification
   compress: true,
-  swcMinify: true,
   reactStrictMode: true,
 
   // ✅ Optimize package imports
@@ -90,7 +89,7 @@ const nextConfig = {
               "img-src 'self' data: https: blob: https://imagedelivery.net",
               "font-src 'self' data:",
               "connect-src 'self' https://api.cloudflare.com https://*.gateway.api.cloudflare.com https://upload.imagedelivery.net https://*.r2.cloudflarestorage.com",
-              "frame-src 'self' https://www.youtube-nocookie.com https://www.youtube.com",
+              "frame-src 'self' https://www.youtube-nocookie.com https://www.youtube.com https://*.cloudflarestream.com",
               "media-src 'self' blob:",
               "worker-src 'self' blob:",
             ].join('; '),

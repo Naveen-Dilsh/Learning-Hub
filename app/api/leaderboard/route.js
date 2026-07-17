@@ -1,4 +1,6 @@
 import { prisma } from "@/lib/db"
+import { getServerSession } from "next-auth"
+import { authOptions } from "@/lib/auth"
 import { NextResponse } from "next/server"
 import { unstable_cache } from "next/cache"
 
@@ -14,7 +16,6 @@ async function getLeaderboardData(limit) {
     select: {
       id: true,
       name: true,
-      email: true,
       credits: true,
       image: true,
       _count: {
@@ -43,8 +44,13 @@ async function getLeaderboardData(limit) {
 
 export async function GET(req) {
   try {
+    const session = await getServerSession(authOptions)
+    if (!session) {
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
+    }
+
     const { searchParams } = new URL(req.url)
-    const limit = parseInt(searchParams.get("limit") || "50")
+    const limit = Math.min(Math.max(parseInt(searchParams.get("limit") || "50", 10) || 50, 1), 100)
 
     // Cache leaderboard for 60 seconds
     const cachedGetLeaderboard = unstable_cache(
