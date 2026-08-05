@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { useToast } from "@/hooks/use-toast"
 import LoadingBubbles from "@/components/loadingBubbles"
+import { generateDeliveryWordDocument } from "@/lib/generate-delivery-doc"
 import {
   Package,
   Truck,
@@ -17,6 +18,7 @@ import {
   Trash2,
   X,
   Save,
+  FileDown,
 } from "lucide-react"
 
 const STATUS_CONFIG = {
@@ -208,6 +210,7 @@ export default function InstructorDeliveries() {
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedDelivery, setSelectedDelivery] = useState(null)
   const [deleting, setDeleting] = useState(null)
+  const [generatingDoc, setGeneratingDoc] = useState(false)
 
   useEffect(() => {
     if (authStatus === "unauthenticated") {
@@ -368,6 +371,35 @@ export default function InstructorDeliveries() {
     )
   }, [deliveries, searchQuery])
 
+  const handleDownloadWord = useCallback(async () => {
+    if (filteredDeliveries.length === 0) {
+      toast({
+        title: "No deliveries",
+        description: "There are no deliveries to export.",
+        variant: "destructive",
+      })
+      return
+    }
+    setGeneratingDoc(true)
+    try {
+      const filterLabel = filterStatus ? STATUS_CONFIG[filterStatus]?.label : ""
+      await generateDeliveryWordDocument(filteredDeliveries, filterLabel)
+      toast({
+        title: "Success",
+        description: `Word document with ${filteredDeliveries.length} deliveries downloaded!`,
+      })
+    } catch (err) {
+      console.error("Error generating Word document:", err)
+      toast({
+        title: "Error",
+        description: "Failed to generate Word document.",
+        variant: "destructive",
+      })
+    } finally {
+      setGeneratingDoc(false)
+    }
+  }, [filteredDeliveries, filterStatus, toast])
+
   if (authStatus === "loading" || isLoading || !session?.user?.id) {
     return <LoadingBubbles />
   }
@@ -391,6 +423,24 @@ export default function InstructorDeliveries() {
                 </p>
               </div>
             </div>
+            <button
+              onClick={handleDownloadWord}
+              disabled={generatingDoc || filteredDeliveries.length === 0}
+              className="btn-secondary inline-flex items-center gap-2 px-4 sm:px-5 py-2.5 sm:py-3 rounded-xl text-sm font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] border border-border"
+            >
+              {generatingDoc ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-foreground border-t-transparent rounded-full animate-spin" />
+                  Generating...
+                </>
+              ) : (
+                <>
+                  <FileDown className="w-4 h-4 sm:w-5 sm:h-5" />
+                  <span className="hidden sm:inline">Download Word</span>
+                  <span className="sm:hidden">Word</span>
+                </>
+              )}
+            </button>
           </div>
 
           {/* Status counts */}

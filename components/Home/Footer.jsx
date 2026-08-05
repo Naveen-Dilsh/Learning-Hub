@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import Image from "next/image"
-import { Phone, Mail, MapPin, Facebook, Instagram, Youtube } from "lucide-react"
+import { Phone, Mail, MapPin, Facebook, Linkedin, Youtube } from "lucide-react"
 
 function scrollToId(id) {
   if (typeof window === "undefined") return
@@ -13,10 +13,12 @@ function scrollToId(id) {
   window.scrollTo({ top: y, behavior: "smooth" })
 }
 
-function SocialIcon({ icon: Icon, label }) {
+function SocialIcon({ icon: Icon, label, href = "#" }) {
   return (
     <a
-      href="#"
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
       aria-label={label}
       className="w-8 h-8 rounded-full bg-[var(--hero-card-bg)] border border-[var(--hero-card-border)] flex items-center justify-center hover:bg-[var(--hero-gradient-start)] hover:text-white transition-all"
     >
@@ -100,8 +102,8 @@ export default function Footer() {
             <ul className="space-y-2 text-xs sm:text-sm font-[family-name:var(--font-sinhala)] text-[var(--hero-text-secondary)]">
               <li className="flex items-center gap-2">
                 <Phone className="w-4 h-4" />
-                <a href="tel:+947XXXXXXXX" className="hover:text-[var(--hero-text-primary)] transition-colors">
-                  +94 7X XXX XXXX
+                <a href="tel:+94778888010" className="hover:text-[var(--hero-text-primary)] transition-colors">
+                  +94 77 888 8010
                 </a>
               </li>
               <li className="flex items-center gap-2">
@@ -115,14 +117,14 @@ export default function Footer() {
               </li>
               <li className="flex items-start gap-2">
                 <MapPin className="w-4 h-4 mt-0.5" />
-                <span>මාතර / කොළඹ පංති මධ්‍යස්ථාන</span>
+                <span>NO.534/2/1 Iddagodawathta Rd, 10th Mile Post Rd Werahera, Boralesgamuwa</span>
               </li>
             </ul>
 
             <div className="mt-4 flex gap-3">
-              <SocialIcon icon={Facebook} label="Facebook" />
-              <SocialIcon icon={Instagram} label="Instagram" />
-              <SocialIcon icon={Youtube} label="YouTube" />
+              <SocialIcon icon={Facebook} label="Facebook" href="https://www.facebook.com/share/r/1JDs4VvMJ3/" />
+              <SocialIcon icon={Linkedin} label="LinkedIn" href="https://www.linkedin.com/in/manusha-prasanga-ba34583a5/" />
+              <SocialIcon icon={Youtube} label="YouTube" href="https://youtube.com/@manushaprasanga9810?si=A9xMODO5e7JpvxlU" />
             </div>
           </div>
         </div>
