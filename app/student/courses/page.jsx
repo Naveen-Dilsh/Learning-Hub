@@ -187,7 +187,7 @@ export default function MyCourses() {
               Browse our course catalog and enroll in courses to start your learning journey
             </p>
             <Link
-              href="/student/browse-courses"
+              href="/student/browse-course"
               className="btn-primary inline-block px-4 sm:px-6 py-2.5 sm:py-3 rounded-lg font-semibold text-sm sm:text-base active:scale-[0.98]"
             >
               Explore Courses
