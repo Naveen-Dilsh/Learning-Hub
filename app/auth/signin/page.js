@@ -4,12 +4,11 @@ import { useState, useCallback, useMemo } from "react"
 import { useToast } from "@/hooks/use-toast"
 import { Mail, Lock, ArrowRight, Eye, EyeOff, GraduationCap } from "lucide-react"
 import Link from "next/link"
-import { signIn, useSession } from "next-auth/react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { signIn, getSession } from "next-auth/react"
+import { useSearchParams } from "next/navigation"
 import Image from "next/image"
 
 export default function SignIn() {
-  const router = useRouter()
   const searchParams = useSearchParams()
   const { toast } = useToast()
   const [email, setEmail] = useState("")
@@ -39,43 +38,59 @@ export default function SignIn() {
           redirect: false,
         })
 
-        if (result?.error) {
+        if (!result?.ok || result?.error) {
+          // authorize() throws its own message ("Invalid credentials"); next-auth
+          // uses "CredentialsSignin" when it returns null. Both mean bad login.
+          const known = result?.error === "CredentialsSignin" || result?.error === "Invalid credentials"
           toast({
             variant: "destructive",
             title: "Sign In Failed",
-            description: result.error === "CredentialsSignin" ? "Invalid email or password" : result.error,
+            description: known
+              ? "Invalid email or password"
+              : result?.error || "Something went wrong. Please try again.",
           })
-        } else if (result?.ok) {
-          toast({
-            title: "Welcome Back",
-            description: "You have been signed in successfully.",
-          })
-
-          // Fetch session to get user role for redirect
-          const sessionResponse = await fetch("/api/auth/session")
-          const session = await sessionResponse.json()
-          const userRole = session?.user?.role
-
-          // Redirect based on user role
-          if (userRole === "ADMIN") {
-            router.push("/instructor/enrollments/pending")
-          } else if (userRole === "INSTRUCTOR") {
-            router.push("/instructor/dashboard")
-          } else {
-            router.push(callbackUrl)
-          }
+          setLoading(false)
+          return
         }
+
+        // Resolve the landing route BEFORE announcing success - if this step
+        // fails we still send the user somewhere valid instead of leaving them
+        // on the login page staring at a success message.
+        let destination = callbackUrl
+        try {
+          const session = await getSession()
+          const role = session?.user?.role
+          if (role === "ADMIN") {
+            destination = "/instructor/enrollments/pending"
+          } else if (role === "INSTRUCTOR") {
+            destination = "/instructor/dashboard"
+          } else if (destination.startsWith("/instructor") || destination.startsWith("/admin")) {
+            // A student bounced off a staff route would loop straight back here
+            destination = "/student"
+          }
+        } catch {
+          destination = callbackUrl
+        }
+
+        toast({
+          title: "Welcome Back",
+          description: "You have been signed in successfully.",
+        })
+
+        // Full navigation, not router.push: the destination layouts guard on
+        // useSession, and a soft push can mount them before SessionProvider has
+        // picked up the new cookie - which bounces the user back to signin.
+        window.location.assign(destination)
       } catch (err) {
         toast({
           variant: "destructive",
           title: "Error",
           description: err.message || "An error occurred. Please try again.",
         })
-      } finally {
         setLoading(false)
       }
     },
-    [email, password, callbackUrl, router, toast],
+    [email, password, callbackUrl, toast],
   )
 
   const handleGoogleSignIn = useCallback(() => {
