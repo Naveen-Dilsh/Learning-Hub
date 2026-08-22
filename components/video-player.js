@@ -686,7 +686,7 @@ export default function VideoPlayer({ videoId, courseId, videoTitle, userName, u
       </div>
 
       {/* Custom controls bar */}
-      <div className="relative z-40 flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2 sm:py-2.5 bg-zinc-900 select-none">
+      <div className="relative z-40 flex items-center gap-1.5 sm:gap-3 px-2 sm:px-4 py-2 sm:py-2.5 bg-zinc-900 select-none">
         <button
           onClick={togglePlay}
           className="text-white hover:text-white/80 transition flex-shrink-0"
@@ -695,10 +695,14 @@ export default function VideoPlayer({ videoId, courseId, videoTitle, userName, u
           {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
         </button>
 
-        <span className="text-white/80 text-xs font-mono flex-shrink-0">
+        <span className="text-white/80 text-[11px] sm:text-xs font-mono tabular-nums flex-shrink-0">
           {formatTime(currentTime)}
         </span>
 
+        {/* min-w-0 is load-bearing: flex items default to min-width:auto, so a
+            range input will not shrink below its ~129px intrinsic width. Without
+            it, long durations (2:01:59) on narrow screens push the fullscreen
+            button past the wrapper's overflow-hidden and it disappears. */}
         <input
           type="range"
           min={0}
@@ -708,11 +712,11 @@ export default function VideoPlayer({ videoId, courseId, videoTitle, userName, u
           onChange={handleSeek}
           onPointerDown={() => { isSeekingRef.current = true }}
           onPointerUp={() => { isSeekingRef.current = false }}
-          className="flex-1 h-1.5 accent-red-600 cursor-pointer"
+          className="flex-1 min-w-0 h-1.5 accent-red-600 cursor-pointer"
           aria-label="Seek"
         />
 
-        <span className="text-white/80 text-xs font-mono flex-shrink-0">
+        <span className="text-white/80 text-[11px] sm:text-xs font-mono tabular-nums flex-shrink-0">
           {formatTime(videoDuration)}
         </span>
 
