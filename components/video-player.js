@@ -4,6 +4,8 @@ import { useEffect, useState, useRef, useCallback } from "react"
 import { useVideoStore } from "@/lib/stores"
 import { Play, Pause, Volume2, VolumeX, Maximize, RotateCcw } from "lucide-react"
 
+const PLAYBACK_RATES = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2]
+
 // Load the YouTube IFrame Player API once and share the promise across players
 let youtubeApiPromise = null
 function loadYouTubeApi() {
@@ -48,6 +50,8 @@ export default function VideoPlayer({ videoId, courseId, videoTitle, userName, u
   const [isPlaying, setIsPlaying] = useState(false)
   const [hasEnded, setHasEnded] = useState(false)
   const [isMuted, setIsMuted] = useState(false)
+  const [playbackRate, setPlaybackRateState] = useState(1)
+  const [speedMenuOpen, setSpeedMenuOpen] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [videoDuration, setVideoDuration] = useState(0)
   // Masks that hide YouTube's title/logo overlays while they are visible
@@ -396,6 +400,9 @@ export default function VideoPlayer({ videoId, courseId, videoTitle, userName, u
               }
               setPlayerReady(true)
             },
+            onPlaybackRateChange: (event) => {
+              setPlaybackRateState(event.data)
+            },
             onStateChange: (event) => {
               if (event.data === YT.PlayerState.PLAYING) {
                 setIsPlaying(true)
@@ -527,6 +534,17 @@ export default function VideoPlayer({ videoId, courseId, videoTitle, userName, u
       showMaskTemporarily()
     }
   }, [playerReady, showMaskTemporarily])
+
+  // Speed lives in our own bar and drives the IFrame API directly, so
+  // YouTube's controls (and the "Watch on YouTube" link they carry) stay hidden.
+  const changeSpeed = useCallback((rate) => {
+    const player = ytPlayerRef.current
+    if (player && playerReady) {
+      player.setPlaybackRate(rate)
+    }
+    setPlaybackRateState(rate)
+    setSpeedMenuOpen(false)
+  }, [playerReady])
 
   const toggleFullscreen = useCallback(() => {
     const el = wrapperRef.current
@@ -727,6 +745,36 @@ export default function VideoPlayer({ videoId, courseId, videoTitle, userName, u
         >
           {isMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
         </button>
+
+        <div className="relative flex-shrink-0">
+          {speedMenuOpen && (
+            <>
+              {/* fixed so the click-away target escapes the wrapper's overflow-hidden */}
+              <div className="fixed inset-0 z-40" onClick={() => setSpeedMenuOpen(false)} />
+              <div className="absolute bottom-full right-0 mb-2 z-50 bg-zinc-800 border border-white/15 rounded-lg py-1 shadow-xl">
+                {PLAYBACK_RATES.map((rate) => (
+                  <button
+                    key={rate}
+                    onClick={() => changeSpeed(rate)}
+                    className={`block w-full text-left px-3 py-1.5 text-xs whitespace-nowrap transition ${
+                      rate === playbackRate ? "text-red-400 font-semibold" : "text-white/80 hover:bg-white/10"
+                    }`}
+                  >
+                    {rate === 1 ? "Normal" : `${rate}×`}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+          <button
+            onClick={() => setSpeedMenuOpen((open) => !open)}
+            className="text-white hover:text-white/80 transition text-[11px] sm:text-xs font-semibold tabular-nums"
+            aria-label="Playback speed"
+            aria-expanded={speedMenuOpen}
+          >
+            {playbackRate}×
+          </button>
+        </div>
 
         <button
           onClick={toggleFullscreen}
