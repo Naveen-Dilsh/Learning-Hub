@@ -1,5 +1,14 @@
 /** @type {import('next').NextConfig} */
 const isDev = process.env.NODE_ENV === 'development'
+
+// Public host serving user-uploaded images from R2 (e.g. images.epencilacademy.com)
+const r2ImagesHost = (() => {
+  try {
+    return new URL(process.env.R2_IMAGES_PUBLIC_URL).hostname
+  } catch {
+    return null
+  }
+})()
 const nextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
@@ -35,6 +44,12 @@ const nextConfig = {
         hostname: '**.r2.cloudflarestorage.com',
         pathname: '/**',
       },
+      {
+        protocol: 'https',
+        hostname: '**.r2.dev',
+        pathname: '/**',
+      },
+      ...(r2ImagesHost ? [{ protocol: 'https', hostname: r2ImagesHost, pathname: '/**' }] : []),
     ],
   },
 

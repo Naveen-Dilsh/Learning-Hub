@@ -34,42 +34,27 @@ export default function ImageUpload({ onUploadComplete, currentImage, aspectRati
       const urlResponse = await fetch("/api/cloudflare/images/upload-url", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          metadata: {
-            uploadedAt: new Date().toISOString(),
-          },
-        }),
+        body: JSON.stringify({ contentType: file.type }),
       })
-      console.log('image-uploader', urlResponse)
 
       if (!urlResponse.ok) {
-        throw new Error("Failed to get upload URL")
+        const errorData = await urlResponse.json().catch(() => ({}))
+        throw new Error(errorData.message || "Failed to get upload URL")
       }
 
-      const { uploadURL, imageId } = await urlResponse.json()
-      console.log(uploadURL,imageId)
-      // Step 2: Upload the file directly to Cloudflare
-      const formData = new FormData()
-      formData.append("file", file)
+      const { uploadURL, imageUrl } = await urlResponse.json()
 
+      // Step 2: Upload the file directly to R2 (Content-Type must match the signed URL)
       const uploadResponse = await fetch(uploadURL, {
-        method: "POST",
-        body: formData,
+        method: "PUT",
+        headers: { "Content-Type": file.type },
+        body: file,
       })
 
       if (!uploadResponse.ok) {
+        console.error("R2 upload failed:", uploadResponse.status, await uploadResponse.text().catch(() => ""))
         throw new Error("Failed to upload image")
       }
-
-      const uploadData = await uploadResponse.json()
-
-      if (!uploadData.success) {
-        throw new Error("Upload failed")
-      }
-
-      // Construct the Cloudflare Images URL
-      const accountHash = process.env.NEXT_PUBLIC_CLOUDFLARE_ACCOUNT_HASH || "UpcYAZA_EOk-JiIrjAIa2Q"
-      const imageUrl = `https://imagedelivery.net/${accountHash}/${imageId}/public`
 
       setPreview(imageUrl)
       onUploadComplete(imageUrl)
@@ -82,33 +67,23 @@ export default function ImageUpload({ onUploadComplete, currentImage, aspectRati
   }
 
   const handleRemove = async () => {
-    // Extract image ID from Cloudflare Images URL if it's a Cloudflare URL
+    // Delete from R2 (the API skips URLs that aren't in our images bucket)
     const currentImageUrl = preview || currentImage
-    if (currentImageUrl && currentImageUrl.includes("imagedelivery.net")) {
+    if (currentImageUrl && currentImageUrl.startsWith("http")) {
       try {
-        // Extract image ID from URL: https://imagedelivery.net/{accountHash}/{imageId}/public
-        // Example: https://imagedelivery.net/UpcYAZA_EOk-JiIrjAIa2Q/abc123/public
-        const urlMatch = currentImageUrl.match(/imagedelivery\.net\/[^\/]+\/([^\/]+)/)
-        const imageId = urlMatch ? urlMatch[1] : null
+        const deleteResponse = await fetch("/api/cloudflare/images/delete", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ imageUrl: currentImageUrl }),
+        })
 
-        if (imageId) {
-          // Delete from Cloudflare Images
-          const deleteResponse = await fetch("/api/cloudflare/images/delete", {
-            method: "DELETE",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ imageId }),
-          })
-
-          if (!deleteResponse.ok) {
-            const errorData = await deleteResponse.json().catch(() => ({}))
-            console.error("Failed to delete image from Cloudflare:", errorData)
-            // Continue with removal even if Cloudflare deletion fails
-          } else {
-            console.log("Successfully deleted image from Cloudflare:", imageId)
-          }
+        if (!deleteResponse.ok) {
+          const errorData = await deleteResponse.json().catch(() => ({}))
+          console.error("Failed to delete image from storage:", errorData)
+          // Continue with removal even if deletion fails
         }
       } catch (error) {
-        console.error("Error deleting image from Cloudflare:", error)
+        console.error("Error deleting image from storage:", error)
         // Continue with removal even if deletion fails
       }
     }

@@ -4,6 +4,8 @@ import { useEffect, useState, useRef, useCallback } from "react"
 import { useVideoStore } from "@/lib/stores"
 import { Play, Pause, Volume2, VolumeX, Maximize, RotateCcw } from "lucide-react"
 
+const PLAYBACK_RATES = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2]
+
 // Load the YouTube IFrame Player API once and share the promise across players
 let youtubeApiPromise = null
 function loadYouTubeApi() {
@@ -48,6 +50,8 @@ export default function VideoPlayer({ videoId, courseId, videoTitle, userName, u
   const [isPlaying, setIsPlaying] = useState(false)
   const [hasEnded, setHasEnded] = useState(false)
   const [isMuted, setIsMuted] = useState(false)
+  const [playbackRate, setPlaybackRateState] = useState(1)
+  const [speedMenuOpen, setSpeedMenuOpen] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [videoDuration, setVideoDuration] = useState(0)
   // Masks that hide YouTube's title/logo overlays while they are visible
@@ -396,6 +400,9 @@ export default function VideoPlayer({ videoId, courseId, videoTitle, userName, u
               }
               setPlayerReady(true)
             },
+            onPlaybackRateChange: (event) => {
+              setPlaybackRateState(event.data)
+            },
             onStateChange: (event) => {
               if (event.data === YT.PlayerState.PLAYING) {
                 setIsPlaying(true)
@@ -527,6 +534,17 @@ export default function VideoPlayer({ videoId, courseId, videoTitle, userName, u
       showMaskTemporarily()
     }
   }, [playerReady, showMaskTemporarily])
+
+  // Speed lives in our own bar and drives the IFrame API directly, so
+  // YouTube's controls (and the "Watch on YouTube" link they carry) stay hidden.
+  const changeSpeed = useCallback((rate) => {
+    const player = ytPlayerRef.current
+    if (player && playerReady) {
+      player.setPlaybackRate(rate)
+    }
+    setPlaybackRateState(rate)
+    setSpeedMenuOpen(false)
+  }, [playerReady])
 
   const toggleFullscreen = useCallback(() => {
     const el = wrapperRef.current
@@ -686,7 +704,7 @@ export default function VideoPlayer({ videoId, courseId, videoTitle, userName, u
       </div>
 
       {/* Custom controls bar */}
-      <div className="relative z-40 flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2 sm:py-2.5 bg-zinc-900 select-none">
+      <div className="relative z-40 flex items-center gap-1.5 sm:gap-3 px-2 sm:px-4 py-2 sm:py-2.5 bg-zinc-900 select-none">
         <button
           onClick={togglePlay}
           className="text-white hover:text-white/80 transition flex-shrink-0"
@@ -695,10 +713,14 @@ export default function VideoPlayer({ videoId, courseId, videoTitle, userName, u
           {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
         </button>
 
-        <span className="text-white/80 text-xs font-mono flex-shrink-0">
+        <span className="text-white/80 text-[11px] sm:text-xs font-mono tabular-nums flex-shrink-0">
           {formatTime(currentTime)}
         </span>
 
+        {/* min-w-0 is load-bearing: flex items default to min-width:auto, so a
+            range input will not shrink below its ~129px intrinsic width. Without
+            it, long durations (2:01:59) on narrow screens push the fullscreen
+            button past the wrapper's overflow-hidden and it disappears. */}
         <input
           type="range"
           min={0}
@@ -708,11 +730,11 @@ export default function VideoPlayer({ videoId, courseId, videoTitle, userName, u
           onChange={handleSeek}
           onPointerDown={() => { isSeekingRef.current = true }}
           onPointerUp={() => { isSeekingRef.current = false }}
-          className="flex-1 h-1.5 accent-red-600 cursor-pointer"
+          className="flex-1 min-w-0 h-1.5 accent-red-600 cursor-pointer"
           aria-label="Seek"
         />
 
-        <span className="text-white/80 text-xs font-mono flex-shrink-0">
+        <span className="text-white/80 text-[11px] sm:text-xs font-mono tabular-nums flex-shrink-0">
           {formatTime(videoDuration)}
         </span>
 
@@ -723,6 +745,36 @@ export default function VideoPlayer({ videoId, courseId, videoTitle, userName, u
         >
           {isMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
         </button>
+
+        <div className="relative flex-shrink-0">
+          {speedMenuOpen && (
+            <>
+              {/* fixed so the click-away target escapes the wrapper's overflow-hidden */}
+              <div className="fixed inset-0 z-40" onClick={() => setSpeedMenuOpen(false)} />
+              <div className="absolute bottom-full right-0 mb-2 z-50 bg-zinc-800 border border-white/15 rounded-lg py-1 shadow-xl">
+                {PLAYBACK_RATES.map((rate) => (
+                  <button
+                    key={rate}
+                    onClick={() => changeSpeed(rate)}
+                    className={`block w-full text-left px-3 py-1.5 text-xs whitespace-nowrap transition ${
+                      rate === playbackRate ? "text-red-400 font-semibold" : "text-white/80 hover:bg-white/10"
+                    }`}
+                  >
+                    {rate === 1 ? "Normal" : `${rate}×`}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+          <button
+            onClick={() => setSpeedMenuOpen((open) => !open)}
+            className="text-white hover:text-white/80 transition text-[11px] sm:text-xs font-semibold tabular-nums"
+            aria-label="Playback speed"
+            aria-expanded={speedMenuOpen}
+          >
+            {playbackRate}×
+          </button>
+        </div>
 
         <button
           onClick={toggleFullscreen}
